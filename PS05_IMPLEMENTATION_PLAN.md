@@ -1,7 +1,17 @@
-# VISHWAS: PS05 Final Implementation Plan
+# VISHWAS: PS05 Final Implementation Plan (v3 with Voice-Clone Detection)
 
 **Positioning Statement:**  
-VISHWAS doesn't ask "is this voice fake?" It asks "does this caller's story match what we know and can verify about them?" The AI extracts evidence, deterministic rules decide, and the human stays in control.
+VISHWAS asks two questions together: "Does this voice show signs of being synthetic or not match the claimed person?" and "Does the caller's story match what we know and can verify?" The AI extracts evidence, deterministic rules decide, and the human stays in control.
+
+## What Changed from v2
+
+1. **Voice-clone detection** is now a real evidence layer with two checks:
+   - **Check A:** Synthetic-speech detection (AASIST or wav2vec2-based)
+   - **Check B:** Voiceprint match against enrolled contacts
+2. The **Judge** has voice rules and one voice-aware floor
+3. A **voice enrollment endpoint** and screen are added
+4. The **schedule and evaluation** now include voice validation
+5. The **counterfactual examples** are corrected with proper arithmetic
 
 ---
 
@@ -18,30 +28,43 @@ VISHWAS doesn't ask "is this voice fake?" It asks "does this caller's story matc
 
 ---
 
-## 1. Unique Features
+## 1. Input Modes (One Pipeline)
+
+| Mode | Source | Role |
+|------|--------|------|
+| **A. Recording upload** | WAV/MP3/M4A from web or Android | Primary. Fully satisfies PS05 |
+| **B. Live stream** | Mic → WebSocket (2s chunks), via speakerphone or VoIP | Demonstrates mid-call warning |
+| **C. Simulated transcript** | scenarios.json | Fallback if ASR or mic fails |
+
+**Note:** Cellular call audio is not accessible on Android, so put that limitation on a slide. All modes produce the same `TranscriptSegment` objects, so nothing downstream cares which was used.
+
+---
+
+## 2. Unique Features
 
 Each feature is buildable in the available time and maps to a PS05 requirement.
 
 | # | Feature | What the Judge Sees | Build Effort |
 |---|---------|-------------------|--------------|
 | 1 | **Claim-vs-Graph Contradiction Engine** | Caller says "Mummy bol rahi hoon", but the Trust Graph shows Mom's saved number is different. The UI shows "Claim contradicts your records." | Low |
-| 2 | **Counterfactual Explanation** | "If this call came from Mom's saved number, the score would drop from 70 to 15." Computed by re-running the deterministic Judge with changed input, so it's provably true. | Low (only possible because scoring is deterministic) |
-| 3 | **Evidence-Linked Reasons** | Click any reason and the transcript jumps to the exact quote and timestamp, highlighted. | Low |
-| 4 | **Risk Timeline Replay** | A chart of score over time with kill-chain markers: "First HIGH at 0:08, Critical at 0:12." Works for recordings and live calls. | Medium |
-| 5 | **Kill-Chain Stage-Skipping Detection** | A stepper (Contact → Trust → Urgency → Request → Secrecy). A call that jumps straight to "send money" is flagged as abnormal. | Medium |
-| 6 | **Guardian One-Tap Confirmation** | A family member gets an email link with "I know this call / This is suspicious." The answer appears live on the user's dashboard. | Medium |
-| 7 | **Hinglish-First Scam Detection** | Patterns for code-mixed phrases ("OTP bata do", "kisi ko mat batana", "account band ho jayega"), tested against English and Hindi as well. | Medium |
-| 8 | **Privacy-First Masking** | OTPs, card numbers and account numbers are masked before any text reaches the LLM. The UI shows "3 sensitive values masked." | Low |
-| 9 | **Fraud vs Skeptic Debate (Advisory)** | Runs only on MEDIUM scores, shown in an "Explain" panel. It can't change the score. | Optional |
-| 10 | **Audit Hash** | Every report stores hash(evidence + rules_version). The same input always gives the same output, and you can show it. | Low |
+| 2 | **Claim-vs-Voiceprint Check (NEW)** | The caller claims to be Mom, but the voice similarity to Mom's enrolled voiceprint is low | Medium |
+| 3 | **Counterfactual Explanation** | "From Mom's saved number this drops from 80 to 15." Computed by re-running the Judge, so it is provably true | Low |
+| 4 | **Evidence-Linked Reasons** | Click any reason and the transcript jumps to the exact quote and timestamp, highlighted | Low |
+| 5 | **Risk Timeline Replay** | A chart of score over time with kill-chain markers: "First HIGH at 0:08, Critical at 0:12." Works for recordings and live calls | Medium |
+| 6 | **Kill-Chain Stage-Skipping Detection** | A stepper (Contact → Trust → Urgency → Request → Secrecy). A call that jumps straight to "send money" is flagged as abnormal | Medium |
+| 7 | **Guardian One-Tap Confirmation** | A family member gets an email link with "I know this call / This is suspicious." The answer appears live on the user's dashboard | Medium |
+| 8 | **Hinglish-First Scam Detection** | Patterns for code-mixed phrases ("OTP bata do", "kisi ko mat batana", "account band ho jayega"), tested against English and Hindi as well | Medium |
+| 9 | **Privacy-First Masking** | OTPs, card numbers and account numbers are masked before any text reaches the LLM. Voice enrollment stores embeddings, not audio. The UI shows "3 sensitive values masked." | Low |
+| 10 | **Audit Hash** | Every report stores hash(evidence + rules_version). The same input always gives the same output, and you can show it | Low |
+| 11 | **Fraud vs Skeptic Debate (Advisory)** | Runs only on MEDIUM scores, shown in an "Explain" panel. It can't change the score | Optional |
 
 ### Priority Order (if time is short)
 
-Build **1, 2, 3, 4, and 8 first**. They have the most "wow" per hour.
+Build **1, 3, 4, 5, 9 and voice Check A first**. They have the most "wow" per hour.
 
 ---
 
-## 2. End-to-End Pipeline
+## 3. End-to-End Pipeline
 
 ```
 INPUT: 
@@ -53,6 +76,13 @@ INPUT:
     - ffmpeg → 16 kHz mono WAV
     - Validation
     - 2s chunks (live mode)
+   ↓
+   ├──────────────► [V] VOICE LAYER (parallel, never blocks ASR)
+   │                   VAD slice into 4–6s windows
+   │                   Quality gate: duration, SNR, clipping → else "inconclusive"
+   │                   Check A: spoof_prob per window → median
+   │                   Check B: speaker similarity vs enrolled voiceprint
+   │                   → VoiceEvidence JSON
    ↓
 [2] Automatic Speech Recognition (ASR)
     - faster-whisper (base/small, int8, VAD)
@@ -83,7 +113,7 @@ INPUT:
     - Channel Check
       → VERIFIED / UNKNOWN / MISMATCH
     - Contradiction Engine
-      → claim vs records
+      → claim vs saved number AND claim vs voiceprint
     - Kill-Chain FSM
     - RAG (ChromaDB, ~20 curated docs)
       → top-3 above threshold, else "no match"
@@ -93,7 +123,7 @@ INPUT:
     - Cannot change score
    ↓
 [7] Trust Judge (Deterministic)
-    - Caps + hard-rule floors
+    - Caps + hard-rule floors (including voice-aware floor)
     - Output: score, level, fired rules
     - Counterfactual runner
     - Audit hash
@@ -114,20 +144,131 @@ OUTPUT: Web Dashboard and Android App (same API)
 - Rolling 6s window with 2s hop
 - Re-runs steps 3–7 each hop
 - Tier 1 fires immediately on partial text
+- Voice result arrives a few seconds in and updates the score when ready
 
 **Recording Mode:**
 - Processes segment by segment
 - Still generates risk timeline
+- Voice layer runs in parallel with ASR
 
 ---
 
-## 3. Key Components
+## 4. Data Contracts (backend/models.py)
 
-### 3.1 Trust Graph
+Everyone imports from this file.
+
+### Evidence Contracts
+
+```json
+{
+  "claims": [
+    {
+      "type": "relative",
+      "value": "mother",
+      "quote": "Mummy bol rahi hoon",
+      "t": 3.2,
+      "confidence": 0.9
+    }
+  ],
+  "requests": [
+    {
+      "type": "money_transfer",
+      "amount": 50000,
+      "quote": "...",
+      "t": 11.0
+    }
+  ],
+  "behavior": {
+    "urgency": true,
+    "secrecy": true,
+    "emotional_pressure": true,
+    "quotes": []
+  }
+}
+```
+
+### Voice Evidence Contract (NEW)
+
+```json
+{
+  "voice": {
+    "status": "ok" | "inconclusive" | "unavailable",
+    "spoof_prob": 0.82,
+    "windows_analyzed": 5,
+    "speaker_match": {
+      "claimed_contact": "Mom",
+      "similarity": 0.41,
+      "enrolled": true
+    },
+    "quality": {
+      "duration_s": 18.4,
+      "snr_db": 14.2
+    },
+    "model": "<model name and version>"
+  }
+}
+```
+
+### Final Report Contract
+
+```json
+{
+  "call_id": "...",
+  "score": 80,
+  "level": "CRITICAL",
+  "category_scores": {
+    "identity": 25,
+    "request": 15,
+    "behavior": 15,
+    "channel": 15,
+    "voice": 10
+  },
+  "fired_rules": ["R_FAMILY_UNSAVED", "R_SPOOF_HIGH"],
+  "reasons": [
+    "Caller claimed to be Mom from an unsaved number",
+    "Voice shows synthetic indicators (experimental)"
+  ],
+  "killchain_stage": "Request",
+  "verification": {
+    "action": "callback_saved_number",
+    "target": "Mom (saved: +91-98xxxx)",
+    "safe_word_prompt": true
+  },
+  "counterfactuals": [
+    {
+      "change": "call from Mom's saved number",
+      "new_score": 15
+    }
+  ],
+  "rag_citations": [],
+  "limitations": [],
+  "audit_hash": "..."
+}
+```
+
+### Error Format
+
+```json
+{
+  "error": {
+    "code": "ASR_FAILURE",
+    "message": "Speech recognition failed",
+    "retryable": true
+  }
+}
+```
+
+---
+
+## 5. Key Components
+
+### 5.1 Trust Graph
 
 **Purpose:** Functional relationship and contact mapping (not a diagram)
 
 **Data Structure:**
+
+**SQLite Tables loaded into NetworkX:**
 
 **Contacts:**
 ```json
@@ -137,7 +278,8 @@ OUTPUT: Web Dashboard and Android App (same API)
   "saved_numbers": ["+919876543210"],
   "safe_word_hash": "sha256(...)",
   "typical_call_hours": [8, 22],
-  "typical_amount": 5000
+  "typical_amount": 5000,
+  "voiceprint_embedding": null
 }
 ```
 
@@ -150,21 +292,26 @@ OUTPUT: Web Dashboard and Android App (same API)
 }
 ```
 
+**Edges:**
+- `trusts`
+- `uses_number`
+- `official_channel_of`
+
 **Channel Status Logic:**
-- Saved number matching the claim → **VERIFIED**
+- Saved number matching the claimed relation → **VERIFIED**
 - Unsaved number claiming a relative → **MISMATCH**
 - Bank claim from non-official number → **MISMATCH**
 - No identity claim → **UNKNOWN**
 
-### 3.2 Scoring System (Corrected and Capped)
+### 5.2 Dynamic Trust Score (Capped, with Floors)
 
-| Group | Cap | Examples |
-|-------|-----|----------|
-| **Identity / Relationship** | 25 | Unsaved number claims trusted contact +20<br>Safe word absent/failed +5 |
-| **Sensitive Request** | 30 | OTP/PIN/password +30<br>Money transfer +15<br>KYC +15 |
-| **Behavioral Pressure** | 20 | Urgency/threat +15<br>Secrecy +5<br>Unusual hour +5<br>Amount > 3× baseline +10 |
+| Group | Cap | Rules |
+|-------|-----|-------|
+| **Identity / Relationship** | 25 | Unsaved number claims trusted contact +20<br>Safe word absent/failed +5<br>Conflicts with contact record +15 |
+| **Sensitive Request** | 30 | OTP/PIN/UPI PIN/password +30<br>Money transfer +15<br>KYC/account details +15 |
+| **Behavioral Pressure** | 20 | Urgency or threat +15<br>Secrecy +5<br>Unusual hour +5<br>Amount > 3× baseline +10 |
 | **Channel Inconsistency** | 15 | Bank/govt claim on unverified number +15<br>New number for known relation +10 |
-| **Voice (AASIST)** | 10 | +0 unless tested and reliable |
+| **Voice (NEW)** | 10 | `status != ok` → 0<br>`spoof_prob ≥ 0.80` → +10<br>`spoof_prob 0.60–0.79` → +5<br>Speaker similarity below threshold for enrolled claimed contact → +5 (within cap) |
 
 **Score Calculation:**
 ```
@@ -172,19 +319,87 @@ score = min(100, sum of capped groups)
 ```
 
 **Hard-Rule Floors:**
-- OTP/PIN request on non-VERIFIED channel → **≥ 75**
-- Money request + secrecy + MISMATCH → **≥ 50**
-- VERIFIED channel + no sensitive request → **≤ 24**
+
+| Floor | Condition |
+|-------|-----------|
+| **≥ 75** | OTP/PIN request on a non-VERIFIED channel |
+| **≥ 50** | Money request + secrecy + MISMATCH |
+| **≥ 50** | Relative claim + non-VERIFIED channel + spoof_prob ≥ 0.80 (voice-aware) |
+| **≤ 24** | VERIFIED channel + no sensitive request |
 
 **Risk Levels:**
-- **0–24:** Low
-- **25–49:** Medium
-- **50–74:** High
-- **75–100:** Critical
+- **0–24:** Low (Green)
+- **25–49:** Medium (Yellow)
+- **50–74:** High (Orange)
+- **75–100:** Critical (Red)
+
+**Voice Design Rules:**
+1. **Soft signal:** Can raise risk, but at most 10 points. Voice alone can never produce Critical
+2. **Never lowers score:** A "real voice" result never lowers the score, because a good clone can pass a detector
+3. **Inconclusive handling:** Short audio, heavy noise, or low bitrate scores 0 and is noted in the report
+4. **Thresholds are placeholders:** Set them from your own test data
 
 **Reasons:** Templates tied to fired rules (LLM never writes the facts)
 
-### 3.3 Cross-Channel Verification
+### 5.3 Reference Scenarios (All Arithmetic Checked)
+
+| Scenario | Identity | Request | Behavior | Channel | Voice | Total | Level |
+|----------|----------|---------|----------|---------|-------|-------|-------|
+| Bank impersonation | 20 | 30 | 15 | 15 | 0 | 80 | Critical |
+| Family emergency, no voice flag | 25 | 15 | 15 | 15 | 0 | 70 | High |
+| Family emergency, cloned voice flagged | 25 | 15 | 15 | 15 | 10 | 80 | Critical |
+| Delivery update | 0 | 0 | 0 | 12 | 0 | 12 | Low |
+
+**Counterfactual Example (Family Emergency with Cloned Voice):**
+- Current score: **80 (Critical)**
+- Without synthetic-voice flag: **70 (High)**
+- From Mom's saved number: **15 (Low)**
+
+---
+
+### 5.4 Voice Layer in Detail (NEW)
+
+| Check | Question | Method |
+|-------|----------|--------|
+| **A. Synthetic-Speech Detection** | Does the audio show signs of generation or replay? | Pretrained anti-spoofing model (AASIST or wav2vec2-based deepfake classifier).<br>**Check model card and license first** |
+| **B. Voiceprint Match** | Does the voice resemble the claimed contact's enrolled voice? | SpeechBrain ECAPA-TDNN embeddings and cosine similarity vs a 10–15s enrollment clip |
+
+#### Implementation
+
+```python
+def analyze_voice(wav_path, claimed_contact=None):
+    try:
+        audio = load_16k_mono(wav_path)
+        wins = vad_slice(audio, win_s=5, hop_s=2.5)
+        
+        if total_speech(wins) < 3.0 or snr(audio) < 5:
+            return {"status": "inconclusive"}
+        
+        out = {
+            "status": "ok",
+            "spoof_prob": float(np.median([spoof_model(w) for w in wins]))
+        }
+        
+        if claimed_contact and has_voiceprint(claimed_contact):
+            out["speaker_match"] = {
+                "similarity": cosine(embed(audio), voiceprint(claimed_contact))
+            }
+        
+        return out
+    except Exception:
+        return {"status": "unavailable"}  # never break the pipeline
+```
+
+#### Key Points
+
+1. **Runs as background task:** ASR and Tier 1 alerts are never delayed
+2. **Enrollment stores embeddings only:** Not the audio
+3. **Check B caveat:** High-quality clone may match voiceprint, so channel and request signals stay primary
+4. **Quality gate:** Short duration, low SNR, or clipping → "inconclusive"
+
+---
+
+### 5.5 Cross-Channel Verification
 
 **Claims a Relative:**
 - Call their saved number
@@ -210,7 +425,7 @@ score = min(100, sum of capped groups)
 
 ---
 
-## 4. API Specification
+## 6. API Specification
 
 ### Endpoints
 
@@ -219,35 +434,26 @@ score = min(100, sum of capped groups)
 | `/analyze/recording` | POST | Upload audio, returns call_id |
 | `/ws/audio/{call_id}` | WebSocket | Live 2s chunks, ordered by chunk_id |
 | `/transcript/simulate` | POST | Scenario input (fallback mode) |
-| `/call/{id}/state` | GET | Transcript, evidence, score, timeline, kill-chain |
+| `/contacts/{id}/voiceprint` | POST | **Enroll a 10–15s clip, store the embedding** |
+| `/call/{id}/state` | GET | Transcript, evidence, voice, score, timeline, kill-chain |
 | `/call/{id}/counterfactual` | GET | "What would make this safe?" |
 | `/calls` | GET | History list |
 | `/call/{id}/export` | GET | Export report (JSON/PDF) |
 | `/alert/guardian` | POST | Send guardian alert |
 | `/guardian/{token}` | GET | One-tap confirmation response |
 
-### Error Format
-
-```json
-{
-  "error": {
-    "code": "ASR_FAILURE",
-    "message": "Speech recognition failed",
-    "retryable": true
-  }
-}
-```
-
 ### Error Handling Requirements
 
+Handle all of the following gracefully:
 - Empty audio
 - Unsupported file formats
 - ASR failure
+- **Voice-model failure**
 - LLM timeout → fall back to regex
 
 ---
 
-## 5. Build Schedule (20 Hours)
+## 7. Build Schedule (20 Hours)
 
 **Team:** 4 members (M1, M2, M3, M4)
 
@@ -255,7 +461,7 @@ score = min(100, sum of capped groups)
 
 **Work:**
 - Repository setup
-- `models.py` (Pydantic contracts)
+- `models.py` (Pydantic contracts including `VoiceEvidence`)
 - `scenarios.json` (5 scam + 2 legit)
 - `trust_seed.json`
 - Mock endpoint
@@ -268,7 +474,7 @@ score = min(100, sum of capped groups)
 
 ### Hours 3–6: Core Modules
 
-**M2:** FastAPI + faster-whisper integration  
+**M2:** FastAPI + faster-whisper + **load spoof model and run it on one clip**  
 **M3:** Extractors, regex fallback, Judge with unit tests  
 **M4:** Dashboard skeleton, Trust Graph loader, RAG ingest  
 **M1:** Mic client, WAV fallback
@@ -276,6 +482,7 @@ score = min(100, sum of capped groups)
 **Exit Check:**
 - Each module works standalone
 - Judge tests pass
+- **Spoof model returns a probability**
 
 ---
 
@@ -290,7 +497,7 @@ score = min(100, sum of capped groups)
 
 ---
 
-### Hours 11–14: Context Integration
+### Hours 11–14: Context Integration + Voice
 
 **Work:**
 - Trust Graph + channel check
@@ -299,14 +506,17 @@ score = min(100, sum of capped groups)
 - RAG integration
 - Counterfactuals
 - Verification prompt generation
+- **Voice: quality gate, windowing, ECAPA enrollment/similarity**
+- **Judge voice rules + tests**
 
 **Exit Check:**
 - Legit scenario → LOW
 - Scenarios 1 and 5 → HIGH/CRITICAL
+- **Inconclusive path works**
 
 ---
 
-### Hours 15–17: Full Pipeline
+### Hours 15–17: Full Pipeline + Voice UI
 
 **Work:**
 - Recording upload integration
@@ -314,10 +524,12 @@ score = min(100, sum of capped groups)
 - Rolling window processing
 - Risk timeline generation
 - Guardian email + one-tap link
+- **Voice card + enrollment screen**
 - `run.sh` script
 
 **Exit Check:**
 - Spoken scam line makes risk rise live
+- **Voice result appears in both modes**
 
 ---
 
@@ -327,7 +539,8 @@ score = min(100, sum of capped groups)
 - Run all 7 scenarios
 - Measure latency over ≥20 chunks
 - WER on English/Hindi/Hinglish clips
-- Precision/recall for classifier
+- Classifier precision/recall
+- **Voice test set (clean vs phone-quality)**
 
 **Exit Check:**
 - Table of measured numbers only (no aspirational goals)
@@ -350,68 +563,74 @@ score = min(100, sum of capped groups)
 
 Priority to cut (in order):
 1. Fraud vs Skeptic debate
-2. AASIST/emotion detection
-3. Audit hash
-4. Guardian email
-5. Live mic
-6. RAG
+2. **Voiceprint (Check B)**
+3. **Voice floor**
+4. Audit hash
+5. Guardian email
+6. Live mic
+7. RAG
+8. **Spoof model (Check A)**
 
 **Must-Have Core:**  
 Simulated transcript → evidence → Trust Graph → Judge → dashboard
 
+**Note:** If the voice layer fails, it degrades to "unavailable" and everything else still works.
+
 ---
 
-## 6. Demo Script (3 Minutes)
+## 9. Demo Script (3 Minutes)
 
 ### 0:00–0:20 (20s): The Problem
 
-"It's 2 AM. Your phone rings: 'Mummy, new number, send money.' Why voice detection alone fails."
+"It's 2 AM. Your phone rings: 'Mummy, new number, send money.'"
 
-### 0:20–1:20 (60s): The Accident Scam
+### 0:20–1:10 (50s): The Cloned-Voice Family Emergency
 
 **Show:**
+- Upload the cloned-voice family-emergency recording
 - The transcript appearing
-- Timeline rising (Medium → High → Critical)
-- Clickable reason jumping to exact quote
-- Verification prompt: "Call Mom's saved number"
+- The timeline rising
+- **The voice card flagging it as synthetic**
 
-### 1:20–1:40 (20s): Counterfactual
-
-**Show:**
-"From Mom's saved number, this drops to Low."
-
-Demonstrates deterministic logic and explainability.
-
-### 1:40–2:10 (30s): Legitimate Call
+### 1:10–1:30 (20s): Evidence-Linked Reasons + Counterfactual
 
 **Show:**
-Legit call from saved number → LOW risk
+- Click a reason → jumps to the quote
+- Show the counterfactual: **"Without the voice flag, 70. From Mom's saved number, 15."**
+
+### 1:30–1:55 (25s): Legitimate Call
+
+**Show:**
+- Upload a real call from a saved number → LOW
+- **Voice card doesn't reduce or inflate anything**
 
 "This shows it isn't a fear machine."
 
-### 2:10–2:30 (20s): Guardian Confirmation
+### 1:55–2:15 (20s): Guardian One-Tap
 
 **Show:**
 - Guardian taps "suspicious" on their phone
 - Dashboard updates live
 
-### 2:30–2:50 (20s): Limitations & Roadmap
+### 2:15–2:40 (25s): Limitations & Key Message
 
 **Honestly state:**
 - Live mode uses speakerphone/VoIP (not cellular)
-- Voice signal optional unless tested
+- Voice detection is experimental
 - Advisory system only
-- Future: Production deployment, cellular integration (with carrier API)
+
+**Key line:**
+"Even a perfect clone that fools our detector is still caught by the identity, channel and request signals."
 
 ---
 
-## 7. Requirement Checklist
+## 10. Requirement Checklist
 
-Update as you build:
+Update as you build. **Mark each as implemented, tested, or pending. Claim only what you've demonstrated.**
 
 | PS05 Requirement | Implementation | Status |
 |-----------------|----------------|--------|
-| Trust Graph | SQLite + NetworkX, seeded | ☐ Pending |
+| Trust Graph | SQLite + NetworkX, seeded contacts, orgs, safe word, voiceprints | ☐ Pending |
 | Channel Verification | channel_status + rules | ☐ Pending |
 | Request Analysis | Regex/classifier + LLM + rules | ☐ Pending |
 | Behavior Analysis | Urgency, secrecy, timing, amount baseline | ☐ Pending |
@@ -420,11 +639,11 @@ Update as you build:
 | Cross-Channel Verification | Graph-derived callback/safe word/app | ☐ Pending |
 | Recording Analysis | Upload → ASR → report | ☐ Pending |
 | Live Mid-Call Warning | WebSocket mic (not cellular) | ☐ Pending |
-| Voice-Clone Signal | AASIST | ☐ Only if tested |
+| Voice-Clone Detection | Check A (spoof) + Check B (voiceprint), soft signal | ☐ Pending |
 
 ---
 
-## 8. Honesty Rules
+## 11. Honesty Rules
 
 **These protect your score and maintain integrity:**
 
@@ -437,14 +656,16 @@ Update as you build:
 - Clearly stated on demo slide
 - Documented in limitations
 
-### 2. Voice Signal
+### 2. Voice Detection
 
-**Reality:** AASIST requires extensive testing for reliability.
+**Reality:** Voice detection is probabilistic, experimental, and capped at 10 points.
 
 **Our Approach:**
-- Voice signal is **optional**
-- Scored **+0 unless tested and validated**
-- Never claim voice-clone detection without proof
+- Voice signal is a **soft signal only**
+- Can raise risk but **cannot alone produce Critical**
+- Report only **measured detection rates**
+- Never claim 100% accuracy
+- State degradation on phone-quality audio
 
 ### 3. Measurement Reporting
 
@@ -477,6 +698,13 @@ Update as you build:
 - Audit hash for reproducibility
 - Evidence citations
 - Counterfactual explanations
+
+### 7. Key Message for Demo
+
+**Always include:**
+"Even a perfect clone that fools our detector is still caught by the identity, channel and request signals."
+
+This shows that voice is one layer in a multi-layered defense.
 
 ---
 
@@ -559,6 +787,20 @@ vishwas/
 1. Known contact from saved number
 2. Expected callback (verified context)
 
+## 8. Evaluation
+
+| What | How |
+|------|-----|
+| **Transcription** | WER on a few English, Hindi and Hinglish clips |
+| **Fraud Classification** | 7-scenario table; precision/recall for the Tier 1 classifier on a held-out split |
+| **Latency** | ASR time, Tier 1 time, time to first HIGH, over ≥20 chunks |
+| **Voice Detection (NEW)** | **Real voices** from team members; **cloned versions** of consenting teammates' voices; each re-encoded to 8 kHz narrowband with noise. Report detection rate and false-positive rate separately for clean and phone-quality audio |
+
+**Expected Behavior:**
+- Expect a drop on phone audio
+- If so, say it: "Works on clean audio, degrades on compressed telephony audio, so it is scored as a soft signal"
+- **Never clone or test on anyone's voice without consent**
+
 ### Performance Targets
 
 **Latency Goals:**
@@ -566,11 +808,13 @@ vishwas/
 - Full analysis (recording): < 5s
 - Live chunk processing: < 500ms
 - WebSocket latency: < 200ms
+- Voice layer (parallel): < 3s
 
 **Accuracy Goals:**
 - False positive rate: < 5%
 - True positive rate: > 90%
 - WER (Whisper): < 15% on clean audio
+- Voice spoof detection: Report actual measured rates
 
 **Resource Limits:**
 - Max recording size: 100 MB
@@ -656,6 +900,45 @@ curl -X POST http://localhost:8000/transcript/simulate \
 
 ---
 
-**Document Version:** 1.0  
+**Document Version:** 3.0 (with Voice-Clone Detection)  
 **Last Updated:** October 12, 2026  
 **Status:** Ready for Implementation
+
+---
+
+## Summary of v3 Changes
+
+1. ✅ **Voice-clone detection added as real evidence layer**
+   - Check A: Synthetic-speech detection (AASIST/wav2vec2)
+   - Check B: Voiceprint match vs enrolled contacts
+   
+2. ✅ **Judge updated with voice rules**
+   - Voice group with 10-point cap
+   - Voice-aware floor: relative claim + non-VERIFIED + spoof_prob ≥ 0.80 → floor 50
+   
+3. ✅ **Voice enrollment endpoint added**
+   - `POST /contacts/{id}/voiceprint` stores embeddings (not audio)
+   
+4. ✅ **Corrected counterfactual examples**
+   - All arithmetic checked against scoring table
+   - Family emergency example: 80 (with voice) → 70 (without voice) → 15 (saved number)
+   
+5. ✅ **Evaluation includes voice validation**
+   - Test on clean vs phone-quality audio
+   - Report detection rate and false-positive rate separately
+   - Consent required for voice cloning tests
+   
+6. ✅ **Updated data contracts**
+   - `VoiceEvidence` schema added
+   - `voiceprint_embedding` added to contacts table
+   - Report includes `category_scores` with voice breakdown
+
+7. ✅ **Voice layer runs in parallel**
+   - Never blocks ASR or Tier 1
+   - Degrades gracefully to "unavailable" on failure
+   - Quality gate for inconclusive results
+
+8. ✅ **Enhanced honesty rules**
+   - Voice is experimental and soft signal
+   - Perfect clones may pass detector
+   - Multi-layered defense emphasized
