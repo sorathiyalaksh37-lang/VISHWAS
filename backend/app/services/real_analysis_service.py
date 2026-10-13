@@ -190,18 +190,64 @@ class RealAnalysisService:
                 f"Voice: {voice_evidence.status}"
             )
 
-            # ── Step 6: Persist to DB ─────────────────────────────────────────
+            # ── Step 6: Persist to DB + Trust Engine Assessment ──────────────
             transcript_dict = _asr_result_to_dict(asr_result, call_id)
             voice_dict = _voice_evidence_to_dict(voice_evidence)
 
-            # Build a basic reasons list from ASR + voice evidence
-            reasons, warnings = self._generate_basic_reasons(
-                asr_result, voice_evidence
-            )
-
-            # Compute a preliminary voice-based risk nudge
-            # (full scoring done by Judge in M3 — this is just for storage)
-            risk_score, risk_level = self._preliminary_risk(voice_evidence)
+            # === Phase 2: Trust Engine Integration ===
+            # Extract evidence and run Trust Judge for deterministic risk assessment
+            try:
+                from app.trust_engine.trust_graph import TrustGraph
+                from app.trust_engine.judge import TrustJudge
+                from app.extractors.evidence_pipeline import extract_evidence
+                
+                logger.info(f"[{call_id}] Running Trust Engine assessment")
+                
+                # Extract evidence from transcript
+                full_text = " ".join(seg.text for seg in asr_result.segments)
+                evidence = extract_evidence(
+                    call_id=call_id,
+                    transcript_text=full_text,
+                    transcript_segments=asr_result.segments,
+                    voice_evidence=voice_evidence
+                )
+                
+                # Run Trust Judge
+                trust_graph = TrustGraph(db)
+                judge = TrustJudge()
+                assessment = judge.evaluate(
+                    call_id=call_id,
+                    evidence=evidence,
+                    trust_graph=trust_graph,
+                    caller_number=claimed_contact  # TODO: Pass actual caller number
+                )
+                
+                # Use Trust Judge assessment
+                risk_score = assessment.score
+                risk_level = assessment.risk_level
+                reasons = assessment.reasons
+                recommended_actions = []
+                if assessment.verification_details:
+                    recommended_actions.append(assessment.verification_details.get("action", ""))
+                    recommended_actions.append(assessment.verification_details.get("recommendation", ""))
+                warnings = assessment.warnings
+                
+                logger.info(
+                    f"[{call_id}] Trust Judge: {risk_level} "
+                    f"(score={risk_score}, channel={assessment.channel_status})"
+                )
+                
+            except Exception as e:
+                logger.warning(
+                    f"[{call_id}] Trust Engine assessment failed, falling back to preliminary: {e}",
+                    exc_info=True
+                )
+                # Fallback to basic reasons if Trust Engine fails
+                reasons, warnings = self._generate_basic_reasons(
+                    asr_result, voice_evidence
+                )
+                risk_score, risk_level = self._preliminary_risk(voice_evidence)
+                recommended_actions = ["Await full analysis from Judge module"]
 
             # Store or update AnalysisReport
             report = (
@@ -220,7 +266,7 @@ class RealAnalysisService:
             report.risk_score = risk_score
             report.reasons_json = json.dumps(reasons, ensure_ascii=False)
             report.recommended_actions_json = json.dumps(
-                ["Await full analysis from Judge module"], ensure_ascii=False
+                recommended_actions, ensure_ascii=False
             )
             report.warnings_json = json.dumps(warnings, ensure_ascii=False)
             report.analysis_mode = "real"
