@@ -111,11 +111,11 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
     /**
      * Poll call status until complete or failed
      */
-    private fun pollCallStatus(callId: String, maxAttempts: Int = 100) {
+    private fun pollCallStatus(callId: String, maxAttempts: Int = 30) {
         viewModelScope.launch {
             var attempts = 0
             while (attempts < maxAttempts) {
-                delay(3000) // Poll every second
+                delay(1000) // Poll every second
                 attempts++
                 
                 repository.getCallStatus(callId).fold(

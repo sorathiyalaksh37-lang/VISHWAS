@@ -9,7 +9,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.vishwas.app.viewmodel.VishwasViewModel
 
@@ -98,30 +97,6 @@ fun ResultsScreen(
                         }
                     }
                     
-                    if (report.riskLevel == "high" || report.riskLevel == "critical") {
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = Color(0xFFFFF3CD)
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        "Do NOT send money",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = Color(0xFF8A6D00)
-                                    )
-                                    Text("• Call back on the saved number", style = MaterialTheme.typography.bodyMedium)
-                                    Text("• Ask for the family safe word", style = MaterialTheme.typography.bodyMedium)
-                                    Text("• Never share an OTP or PIN", style = MaterialTheme.typography.bodyMedium)
-                                }
-                            }
-                        }
-                    }
-
                     // Risk level
                     item {
                         Card(
