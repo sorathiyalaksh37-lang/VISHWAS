@@ -9,7 +9,40 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
+// ── Auth Token Management ──────────────────────────────────────────────────────
+
+const TOKEN_KEY = 'vishwas:auth_token'
+
+function getAuthToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+export interface User {
+  id: string
+  email: string
+  full_name: string | null
+  is_active: boolean
+  is_admin: boolean
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface RegisterRequest {
+  email: string
+  password: string
+  full_name?: string
+}
+
+export interface AuthResponse {
+  access_token: string
+  token_type: string
+  user: User
+}
 
 export interface HealthResponse {
   status: string
@@ -135,6 +168,22 @@ class APIClient {
   }
 
   /**
+   * Get headers for authenticated requests.
+   */
+  private getAuthHeaders(): HeadersInit {
+    const token = getAuthToken()
+    const headers: HeadersInit = {
+      'Accept': 'application/json',
+    }
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    return headers
+  }
+
+  /**
    * Check if the backend is healthy and reachable.
    */
   async checkHealth(): Promise<HealthResponse | null> {
@@ -156,6 +205,88 @@ class APIClient {
     }
   }
 
+  // ── Authentication Methods ──────────────────────────────────────────────────
+
+  /**
+   * Login with email and password.
+   */
+  async login(email: string, password: string): Promise<AuthResponse | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Login failed' }))
+        console.error('Login failed:', errorData)
+        throw new Error(errorData.detail || `HTTP ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Login error:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Register a new user.
+   */
+  async register(email: string, password: string, fullName?: string): Promise<AuthResponse | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ 
+          email, 
+          password,
+          full_name: fullName || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Registration failed' }))
+        console.error('Registration failed:', errorData)
+        throw new Error(errorData.detail || `HTTP ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Registration error:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get current user information.
+   */
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/me`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      })
+
+      if (!response.ok) {
+        console.error(`Get current user failed: ${response.status}`)
+        return null
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Get current user error:', error)
+      return null
+    }
+  }
+
   /**
    * Upload an audio file for analysis.
    */
@@ -164,8 +295,15 @@ class APIClient {
       const formData = new FormData()
       formData.append('file', file)
 
+      const token = getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
       const response = await fetch(`${this.baseURL}/calls`, {
         method: 'POST',
+        headers,
         body: formData,
       })
 
@@ -189,7 +327,7 @@ class APIClient {
     try {
       const response = await fetch(`${this.baseURL}/call/${callId}/status`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers: this.getAuthHeaders(),
       })
 
       if (!response.ok) {
@@ -211,7 +349,7 @@ class APIClient {
     try {
       const response = await fetch(`${this.baseURL}/calls/${callId}/transcript`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers: this.getAuthHeaders(),
       })
 
       if (!response.ok) {
@@ -233,7 +371,7 @@ class APIClient {
     try {
       const response = await fetch(`${this.baseURL}/call/${callId}/state`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers: this.getAuthHeaders(),
       })
 
       if (response.status === 425) {
@@ -262,7 +400,7 @@ class APIClient {
         `${this.baseURL}/calls?page=${page}&page_size=${pageSize}`,
         {
           method: 'GET',
-          headers: { 'Accept': 'application/json' },
+          headers: this.getAuthHeaders(),
         }
       )
 

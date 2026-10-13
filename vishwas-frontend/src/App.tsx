@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import { useAuth } from './contexts/AuthContext'
+import { LoginPage } from './pages/LoginPage'
 import { Shell } from './components/layout/Shell'
 import { AnalyseACall } from './pages/AnalyseACall'
 import { AnalysisReport } from './pages/AnalysisReport'
@@ -34,6 +36,7 @@ function readCompactPref(): boolean {
  * report sub-view is active on the Analyse a Call page.
  */
 function App() {
+  const { isAuthenticated, isLoading } = useAuth()
   const [activeItem, setActiveItem] = useState<NavItem>('overview')
   const [showReport, setShowReport] = useState(false)
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
@@ -94,7 +97,28 @@ function App() {
     }
   }
 
+<<<<<<< HEAD
 
+=======
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage />
+  }
+
+  // Show main app if authenticated
+>>>>>>> 3fa6a05 (Save frontend integration changes)
   return (
     <Shell activeItem={activeItem} onNavigate={handleNavigate}>
       {renderPage()}

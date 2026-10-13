@@ -2,11 +2,14 @@ import {
   BarChart2,
   ClockIcon,
   GitFork,
+  LogOut,
   MicVocalIcon,
   Settings2,
   ShieldCheckIcon,
+  User,
   X,
 } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 export type NavItem = 'overview' | 'trust-graph' | 'analyse' | 'history' | 'settings'
 
@@ -57,6 +60,13 @@ export function Sidebar({
   mobileOpen,
   onMobileClose,
 }: SidebarProps) {
+  const { user, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    onMobileClose()
+  }
+
   return (
     <>
       {/* Mobile overlay backdrop */}
@@ -119,8 +129,30 @@ export function Sidebar({
           </ul>
         </nav>
 
-        {/* Bottom spacer — future: user profile / logout */}
+        {/* Bottom spacer — user profile / logout */}
         <div className="sidebar__footer">
+          {user && (
+            <div className="mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
+                  <User size={16} className="text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-200 truncate">
+                    {user.full_name || user.email.split('@')[0]}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 rounded text-sm text-slate-300 hover:text-white transition-colors"
+              >
+                <LogOut size={14} />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          )}
           <p className="sidebar__version">v0.1.0-alpha</p>
         </div>
       </aside>
