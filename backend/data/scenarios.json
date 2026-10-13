@@ -1,0 +1,75 @@
+{
+    "scenarios": [
+        {
+            "id": "scam1_bank_otp",
+            "type": "scam",
+            "description": "Bank impersonation with OTP request",
+            "expected_level": "CRITICAL",
+            "transcript": [
+                "Hello, this is calling from your bank security department.",
+                "We detected suspicious activity. Share the OTP to verify your identity.",
+                "Your account will be blocked in 10 minutes."
+            ]
+        },
+        {
+            "id": "scam2_accident",
+            "type": "scam",
+            "description": "Relative in accident asks for money, secrecy",
+            "expected_level": "HIGH",
+            "transcript": [
+                "Papa, I had an accident and I am at the hospital.",
+                "Send 50000 immediately. Don't tell anyone at home."
+            ]
+        },
+        {
+            "id": "scam3_kyc",
+            "type": "scam",
+            "description": "Fake KYC verification asking for account details",
+            "expected_level": "HIGH",
+            "transcript": [
+                "We need to update your KYC today or your account will be frozen.",
+                "Please read me your account number and the code we sent you."
+            ]
+        },
+        {
+            "id": "scam4_police",
+            "type": "scam",
+            "description": "Police or legal threat demanding payment",
+            "expected_level": "CRITICAL",
+            "transcript": [
+                "This is the cyber crime police station. A case is registered against you.",
+                "Pay the fine now through this link or you will be arrested today."
+            ]
+        },
+        {
+            "id": "scam5_investment",
+            "type": "scam",
+            "description": "Guaranteed-return investment pressure",
+            "expected_level": "MEDIUM",
+            "transcript": [
+                "I can double your money in 30 days with guaranteed returns.",
+                "This offer ends tonight, so transfer the amount now."
+            ]
+        },
+        {
+            "id": "legit1_saved_contact",
+            "type": "legit",
+            "description": "Family member calling from saved number",
+            "expected_level": "LOW",
+            "transcript": [
+                "Hi, it's me. Are you free for dinner tonight?",
+                "Okay, I'll see you at seven."
+            ]
+        },
+        {
+            "id": "legit2_expected_callback",
+            "type": "legit",
+            "description": "Bank calling back about a customer request",
+            "expected_level": "LOW",
+            "transcript": [
+                "Hello, this is a follow-up on the card replacement you requested.",
+                "Your new card will arrive in five working days. Thank you for calling."
+            ]
+        }
+    ]
+}
