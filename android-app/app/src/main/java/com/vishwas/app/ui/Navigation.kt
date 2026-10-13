@@ -30,6 +30,7 @@ object Routes {
     const val RESULTS   = "results/{callId}"
     const val HISTORY   = "history"
     const val ABOUT     = "about"
+    const val VOICE_DETECTION = "voice-detection"
 
     fun results(callId: String) = "results/$callId"
 }
@@ -44,6 +45,7 @@ private val navItems = listOf(
     NavItem(Routes.DASHBOARD, "Dashboard",        Icons.Default.Dashboard),
     NavItem(Routes.UPLOAD,    "Upload Recording", Icons.Default.Upload),
     NavItem(Routes.RECORD,    "Record",           Icons.Default.Mic),
+    NavItem(Routes.VOICE_DETECTION, "Live Voice Detection", Icons.Default.GraphicEq),
     NavItem(Routes.HISTORY,   "Analysis History", Icons.Default.History),
     NavItem(Routes.ABOUT,     "About",            Icons.Default.Info)
 )
@@ -223,6 +225,13 @@ fun VishwasNavHost(
                             popUpTo(Routes.RECORD) { inclusive = true }
                         }
                     }
+                )
+            }
+            
+            composable(Routes.VOICE_DETECTION) {
+                StreamingVoiceDetectionScreen(
+                    viewModel      = viewModel,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
 

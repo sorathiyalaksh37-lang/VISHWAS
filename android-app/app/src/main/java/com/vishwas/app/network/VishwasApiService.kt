@@ -39,4 +39,21 @@ interface VishwasApiService {
     suspend fun getReport(
         @Path("call_id") callId: String
     ): Response<AnalysisReportResponse>
+    
+    // ── Streaming Voice Detection endpoints ───────────────────────────────────
+    
+    @POST("voice-detection/stream/start")
+    suspend fun startVoiceStream(): Response<StreamSessionResponse>
+    
+    @Multipart
+    @POST("voice-detection/stream/{sessionId}/chunk")
+    suspend fun sendVoiceChunk(
+        @Path("sessionId") sessionId: String,
+        @Part chunk: MultipartBody.Part
+    ): Response<StreamChunkResponse>
+    
+    @DELETE("voice-detection/stream/{sessionId}")
+    suspend fun deleteVoiceStream(
+        @Path("sessionId") sessionId: String
+    ): Response<StreamDeleteResponse>
 }

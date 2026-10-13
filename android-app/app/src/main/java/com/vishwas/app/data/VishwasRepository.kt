@@ -145,4 +145,76 @@ class VishwasRepository(private val context: Context) {
                 Result.failure(e)
             }
         }
+    
+    // ── Streaming Voice Detection methods ─────────────────────────────────────
+    
+    /**
+     * Start streaming voice detection session
+     */
+    suspend fun startVoiceStream(): Result<StreamSessionResponse> = 
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.startVoiceStream()
+                if (response.isSuccessful && response.body() != null) {
+                    Result.success(response.body()!!)
+                } else {
+                    Result.failure(Exception("Failed to start voice stream: ${response.code()} - ${response.errorBody()?.string()}"))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Start voice stream error", e)
+                Result.failure(e)
+            }
+        }
+    
+    /**
+     * Send audio chunk to streaming voice detection session
+     */
+    suspend fun sendVoiceChunk(sessionId: String, chunkBytes: ByteArray): Result<StreamChunkResponse> = 
+        withContext(Dispatchers.IO) {
+            try {
+                val requestBody = okhttp3.RequestBody.create(
+                    "audio/raw".toMediaTypeOrNull(),
+                    chunkBytes
+                )
+                val chunkPart = MultipartBody.Part.createFormData("chunk", "audio.raw", requestBody)
+                
+                val response = api.sendVoiceChunk(sessionId, chunkPart)
+                
+                when {
+                    response.isSuccessful && response.body() != null -> {
+                        Result.success(response.body()!!)
+                    }
+                    response.code() == 404 -> {
+                        Result.failure(Exception("Session expired - please restart"))
+                    }
+                    response.code() == 503 -> {
+                        Result.failure(Exception("Voice detection service unavailable"))
+                    }
+                    else -> {
+                        Result.failure(Exception("Failed to send chunk: ${response.code()} - ${response.errorBody()?.string()}"))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Send voice chunk error", e)
+                Result.failure(e)
+            }
+        }
+    
+    /**
+     * Delete streaming voice detection session
+     */
+    suspend fun deleteVoiceStream(sessionId: String): Result<StreamDeleteResponse> = 
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.deleteVoiceStream(sessionId)
+                if (response.isSuccessful && response.body() != null) {
+                    Result.success(response.body()!!)
+                } else {
+                    Result.failure(Exception("Failed to delete voice stream: ${response.code()}"))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Delete voice stream error", e)
+                Result.failure(e)
+            }
+        }
 }

@@ -38,6 +38,32 @@ data class UploadProgress(
 )
 
 /**
+ * Streaming voice detection state
+ */
+sealed class StreamingVoiceState {
+    object Idle : StreamingVoiceState()
+    object RequestingPermission : StreamingVoiceState()
+    data class Listening(
+        val sessionId: String,
+        val spoofProb: Double?,
+        val confidence: String,
+        val chunksProcessed: Int
+    ) : StreamingVoiceState()
+    data class Analyzing(
+        val sessionId: String,
+        val spoofProb: Double,
+        val confidence: String,
+        val chunksProcessed: Int
+    ) : StreamingVoiceState()
+    data class Complete(
+        val spoofProb: Double,
+        val confidence: String,
+        val totalChunks: Int
+    ) : StreamingVoiceState()
+    data class Error(val message: String) : StreamingVoiceState()
+}
+
+/**
  * ViewModel for VISHWAS app
  */
 class VishwasViewModel(application: Application) : AndroidViewModel(application) {
@@ -47,6 +73,9 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
     
     private val _uiState = MutableStateFlow(VishwasUiState())
     val uiState: StateFlow<VishwasUiState> = _uiState.asStateFlow()
+    
+    private val _streamingVoiceState = MutableStateFlow<StreamingVoiceState>(StreamingVoiceState.Idle)
+    val streamingVoiceState: StateFlow<StreamingVoiceState> = _streamingVoiceState.asStateFlow()
     
     init {
         checkBackendHealth()
@@ -230,5 +259,114 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
      */
     fun clearUploadProgress() {
         _uiState.value = _uiState.value.copy(uploadProgress = null)
+    }
+    
+    // ── Streaming Voice Detection methods ─────────────────────────────────────
+    
+    /**
+     * Start streaming voice detection session
+     */
+    suspend fun startVoiceStreaming(): Result<String> {
+        return try {
+            repository.startVoiceStream().fold(
+                onSuccess = { response ->
+                    _streamingVoiceState.value = StreamingVoiceState.Listening(
+                        sessionId = response.sessionId,
+                        spoofProb = null,
+                        confidence = "insufficient_data",
+                        chunksProcessed = 0
+                    )
+                    Result.success(response.sessionId)
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Start voice streaming failed", error)
+                    _streamingVoiceState.value = StreamingVoiceState.Error(
+                        "Failed to start: ${error.message}"
+                    )
+                    Result.failure(error)
+                }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Start voice streaming exception", e)
+            _streamingVoiceState.value = StreamingVoiceState.Error("Failed to start: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Send audio chunk to streaming session
+     */
+    suspend fun sendAudioChunk(sessionId: String, chunkBytes: ByteArray): Result<StreamChunkResponse> {
+        return try {
+            repository.sendVoiceChunk(sessionId, chunkBytes).fold(
+                onSuccess = { response ->
+                    // Update state based on response label
+                    when (response.label) {
+                        "insufficient_data" -> {
+                            _streamingVoiceState.value = StreamingVoiceState.Listening(
+                                sessionId = sessionId,
+                                spoofProb = response.spoofProb,
+                                confidence = response.confidence,
+                                chunksProcessed = response.chunksProcessed
+                            )
+                        }
+                        "uncertain", "human", "ai_generated" -> {
+                            _streamingVoiceState.value = StreamingVoiceState.Analyzing(
+                                sessionId = sessionId,
+                                spoofProb = response.spoofProb ?: 0.0,
+                                confidence = response.confidence,
+                                chunksProcessed = response.chunksProcessed
+                            )
+                        }
+                    }
+                    Result.success(response)
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Send audio chunk failed", error)
+                    _streamingVoiceState.value = StreamingVoiceState.Error(error.message ?: "Failed to send chunk")
+                    Result.failure(error)
+                }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Send audio chunk exception", e)
+            _streamingVoiceState.value = StreamingVoiceState.Error("Failed to send chunk: ${e.message}")
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Stop streaming voice detection session
+     */
+    suspend fun stopVoiceStreaming(sessionId: String) {
+        try {
+            // Capture final state before stopping
+            val currentState = _streamingVoiceState.value
+            if (currentState is StreamingVoiceState.Analyzing) {
+                _streamingVoiceState.value = StreamingVoiceState.Complete(
+                    spoofProb = currentState.spoofProb,
+                    confidence = currentState.confidence,
+                    totalChunks = currentState.chunksProcessed
+                )
+            }
+            
+            // Delete session on backend
+            repository.deleteVoiceStream(sessionId).fold(
+                onSuccess = {
+                    Log.d(TAG, "Voice stream session deleted: $sessionId")
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Failed to delete voice stream", error)
+                }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Stop voice streaming exception", e)
+        }
+    }
+    
+    /**
+     * Reset streaming voice state to Idle
+     */
+    fun resetVoiceStreamingState() {
+        _streamingVoiceState.value = StreamingVoiceState.Idle
     }
 }
