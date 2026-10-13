@@ -15,12 +15,10 @@ import { apiClient, type AnalysisReportResponse } from '../services/api'
 /**
  * Analysis Report page.
  *
- * Presents the structured report layout that will be populated once the
- * backend returns real results. All sections show honest "not yet analysed"
- * states — no fabricated scores, probabilities, or detection results.
+ * Presents the structured report populated with real backend results.
+ * All sections dynamically render data from the API response.
  *
  * This page is shown when the user navigates to a specific call's report.
- * The backend integration will supply props / URL params to fill the sections.
  */
 
 interface ReportSectionProps {
@@ -93,6 +91,24 @@ export function AnalysisReport({
     fetchReport()
   }, [callId])
 
+  /** Map severity to a display-friendly badge style. */
+  function severityToBadgeClass(severity: string): string {
+    switch (severity.toLowerCase()) {
+      case 'critical': return 'report-finding-badge--fail'
+      case 'high': return 'report-finding-badge--fail'
+      case 'medium': return 'report-finding-badge--warning'
+      case 'low': return 'report-finding-badge--pass'
+      default: return 'report-finding-badge--warning'
+    }
+  }
+
+  /** Format a signal name to be more readable. */
+  function formatSignal(signal: string): string {
+    return signal
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase())
+  }
+
   return (
     <div className="page-content">
       {/* Page heading */}
@@ -115,7 +131,9 @@ export function AnalysisReport({
             <p className="page-heading__subtitle">
               {recordingName
                 ? `Report for: ${recordingName}`
-                : 'No recording selected for this report.'}
+                : report
+                  ? `Report for call: ${report.call_id.slice(0, 8)}...`
+                  : 'No recording selected for this report.'}
             </p>
           </div>
         </div>
@@ -165,15 +183,19 @@ export function AnalysisReport({
             </dd>
           </div>
           <div className="report-dl__row">
-            <dt>Duration</dt>
+            <dt>Completed</dt>
             <dd>
-              <PendingBlock label="Available after analysis" />
+              {report?.completed_at
+                ? new Date(report.completed_at).toLocaleString()
+                : <PendingBlock label="Available after analysis" />}
             </dd>
           </div>
           <div className="report-dl__row">
-            <dt>Sample rate</dt>
+            <dt>Analysis mode</dt>
             <dd>
-              <PendingBlock label="Available after analysis" />
+              {report
+                ? <span className="report-status-badge report-status-badge--completed">{report.analysis_mode.toUpperCase()}</span>
+                : <PendingBlock label="Available after analysis" />}
             </dd>
           </div>
         </dl>
@@ -189,10 +211,10 @@ export function AnalysisReport({
           <>
             <div className="report-status-badge report-status-badge--completed">
               <ShieldIcon size={14} aria-hidden="true" />
-              <span>Completed</span>
+              <span>{report.status.charAt(0).toUpperCase() + report.status.slice(1)}</span>
             </div>
             <p className="report-caption">
-              Analysis mode: {report.analysis_mode}
+              Analysis mode: {report.analysis_mode} | Risk Score: {report.score}/100
             </p>
           </>
         ) : (
@@ -220,16 +242,17 @@ export function AnalysisReport({
             <dl className="report-dl">
               {report.agent_findings.map((finding, idx) => (
                 <div key={idx} className="report-dl__row">
-                  <dt>{finding.check_name}</dt>
+                  <dt>{formatSignal(finding.signal)}</dt>
                   <dd>
-                    <span className={`report-finding-badge report-finding-badge--${finding.status}`}>
-                      {finding.status}
+                    <span className={`report-finding-badge ${severityToBadgeClass(finding.severity)}`}>
+                      {finding.severity}
                     </span>
                     {' '}
-                    {finding.details}
-                    {finding.confidence > 0 && (
+                    {finding.evidence_text}
+                    {finding.confidence != null && finding.confidence > 0 && (
                       <span className="report-caption"> (confidence: {(finding.confidence * 100).toFixed(0)}%)</span>
                     )}
+                    <span className="report-caption"> — Agent: {finding.agent}</span>
                   </dd>
                 </div>
               ))}
@@ -278,14 +301,12 @@ export function AnalysisReport({
       >
         {report ? (
           <div className="report-risk-result">
-            <div className={`report-risk-badge report-risk-badge--${report.risk_level}`}>
-              {report.risk_level.toUpperCase()}
+            <div className={`report-risk-badge report-risk-badge--${report.level.toLowerCase()}`}>
+              {report.level.toUpperCase()}
             </div>
-            {report.risk_score !== undefined && (
-              <p className="report-caption">
-                Score: {report.risk_score.toFixed(2)}
-              </p>
-            )}
+            <p className="report-caption">
+              Score: {report.score}/100
+            </p>
           </div>
         ) : (
           <div className="report-risk-placeholder">
@@ -355,7 +376,7 @@ export function AnalysisReport({
           <div className="report-transcript">
             {report.transcript.segments.map((segment, idx) => (
               <p key={idx} className="report-transcript__segment">
-                <strong>[{segment.speaker}]</strong> {segment.text}
+                <strong>[{segment.speaker ?? 'Speaker'}]</strong> {segment.text}
               </p>
             ))}
           </div>

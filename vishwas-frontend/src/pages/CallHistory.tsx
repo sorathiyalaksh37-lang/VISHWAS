@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { HistoryIcon, RefreshCwIcon, WifiOffIcon, LoaderIcon } from 'lucide-react'
 import { apiClient, type CallListItem } from '../services/api'
 
-type FilterOption = 'all' | 'completed' | 'high-risk' | 'failed'
+type FilterOption = 'all' | 'completed' | 'failed'
 
 /**
  * Call History page.
@@ -52,8 +52,6 @@ export function CallHistory() {
     switch (filter) {
       case 'completed':
         return record.status === 'completed'
-      case 'high-risk':
-        return record.risk_level === 'high' || record.risk_level === 'critical'
       case 'failed':
         return record.status === 'failed'
       default:
@@ -147,13 +145,6 @@ export function CallHistory() {
             Completed
           </button>
           <button
-            className={filter === 'high-risk' ? 'filter-btn filter-btn--active' : 'filter-btn'}
-            onClick={() => setFilter('high-risk')}
-            aria-pressed={filter === 'high-risk'}
-          >
-            High Risk
-          </button>
-          <button
             className={filter === 'failed' ? 'filter-btn filter-btn--active' : 'filter-btn'}
             onClick={() => setFilter('failed')}
             aria-pressed={filter === 'failed'}
@@ -206,7 +197,6 @@ export function CallHistory() {
               <tr>
                 <th>Filename</th>
                 <th>Status</th>
-                <th>Risk Level</th>
                 <th>Date</th>
                 <th>Actions</th>
               </tr>
@@ -221,15 +211,6 @@ export function CallHistory() {
                     <span className={getStatusBadgeClass(record.status)}>
                       {record.status}
                     </span>
-                  </td>
-                  <td>
-                    {record.risk_level ? (
-                      <span className={getRiskBadgeClass(record.risk_level)}>
-                        {record.risk_level}
-                      </span>
-                    ) : (
-                      <span className="history__badge">—</span>
-                    )}
                   </td>
                   <td className="history-table__date">
                     {formatDate(record.created_at)}

@@ -91,7 +91,7 @@ export function AnalyseACall({ onViewReport }: AnalyseACallProps) {
         clearInterval(pollInterval)
         setAnalysisState({ 
           type: 'error', 
-          message: status.error_message || 'Analysis failed' 
+          message: status.error || 'Analysis failed' 
         })
       }
     }, 1000) // Poll every second

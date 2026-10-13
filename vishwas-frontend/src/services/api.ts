@@ -28,61 +28,78 @@ export interface CallStatusResponse {
   call_id: string
   status: 'queued' | 'processing' | 'completed' | 'failed'
   created_at: string
+  updated_at: string
   completed_at?: string
-  error_message?: string
-  analysis_mode: 'mock' | 'real'
+  error?: string
 }
 
 export interface TranscriptSegment {
-  speaker: string
+  speaker: string | null
   text: string
   start: number
   end: number
-  confidence: number
+  language?: string
 }
 
 export interface TranscriptResponse {
   call_id: string
-  language: string
+  language: string | null
   transcription_status: string
   segments: TranscriptSegment[]
   is_mock?: boolean
 }
 
 export interface AgentFinding {
-  check_name: string
-  status: 'pass' | 'fail' | 'warning'
-  details: string
-  confidence: number
+  agent: string
+  signal: string
+  severity: string
+  evidence_text: string
+  start_time?: number | null
+  end_time?: number | null
+  confidence?: number | null
+  source: string
 }
 
 export interface AnalysisReportResponse {
   call_id: string
-  risk_level: 'low' | 'medium' | 'high' | 'critical'
-  risk_score?: number
+  status: string
+  analysis_mode: 'mock' | 'real'
+  language?: string | null
+  transcript?: TranscriptResponse | null
+  level: string
+  score: number
+  category_scores?: Record<string, number | null> | null
+  fired_rules?: string[]
+  killchain_stage?: string | null
+  verification?: Record<string, unknown> | null
+  voice?: Record<string, unknown> | null
+  counterfactuals?: Array<{ change: string; new_score: number }> | null
+  agent_findings: AgentFinding[]
   reasons: string[]
   recommended_actions: string[]
   warnings: string[]
-  transcript?: TranscriptResponse
-  agent_findings?: AgentFinding[]
-  analysis_mode: 'mock' | 'real'
   created_at: string
+  completed_at?: string | null
 }
 
 export interface CallListItem {
   call_id: string
   original_filename: string
   status: string
-  risk_level?: string
   created_at: string
-  completed_at?: string
+  updated_at: string
+}
+
+export interface PaginationInfo {
+  page: number
+  page_size: number
+  total: number
+  pages: number
 }
 
 export interface CallListResponse {
   calls: CallListItem[]
-  total: number
-  page: number
-  page_size: number
+  pagination: PaginationInfo
 }
 
 // ── API Client ─────────────────────────────────────────────────────────────────
