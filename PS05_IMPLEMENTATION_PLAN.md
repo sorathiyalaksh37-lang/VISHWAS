@@ -906,6 +906,254 @@ curl -X POST http://localhost:8000/transcript/simulate \
 
 ---
 
+## 12. Team Member Responsibilities
+
+This section defines clear ownership and deliverables for each team member to ensure parallel progress and accountability.
+
+### Member 1 — Android App + API Integration
+
+**Owns:** `android-app/`
+
+**Responsibilities:**
+- Build upload, progress, result and history screens
+- Integrate upload, status and report endpoints
+- Handle network errors and large-file upload states
+- Display safety warnings and recommendations
+- Test the application on an actual Android device
+
+**Deliverable:**  
+A user can upload a recording and view its completed report on Android.
+
+**Key Tasks:**
+- Implement file picker with Storage Access Framework
+- Create upload progress UI with real-time status updates
+- Build results screen showing:
+  - Risk level with color coding
+  - Evidence-linked reasons (clickable)
+  - Voice detection results (if available)
+  - Recommended actions
+  - Counterfactual explanations
+- Implement history screen with:
+  - List of all previous analyses
+  - Filter by status
+  - Pull-to-refresh
+- Handle error states:
+  - Network timeouts
+  - Backend unavailable
+  - Invalid file formats
+  - Large file upload progress
+- Test on physical Android device (not just emulator)
+- Verify backend URL configuration for device testing
+
+---
+
+### Member 2 — Backend + Perception
+
+**Owns:** `backend/api/`, `backend/audio/`, `backend/storage/`
+
+**Responsibilities:**
+- Build FastAPI endpoints and job-status handling
+- Integrate audio preprocessing and faster-whisper
+- Return timestamped transcripts and language metadata
+- Integrate optional AASIST/Wav2Vec2 models if feasible
+- Save job results and handle processing failures
+
+**Deliverable:**  
+A stable backend that accepts real audio and produces a transcript.
+
+**Key Tasks:**
+- Implement core API routes:
+  - `POST /analyze/recording` - Upload handler
+  - `GET /call/{id}/status` - Status polling
+  - `GET /call/{id}/state` - Full state retrieval
+  - `POST /contacts/{id}/voiceprint` - Voice enrollment
+  - `WS /ws/audio/{call_id}` - Live streaming (if time permits)
+- Audio preprocessing pipeline:
+  - ffmpeg integration for format conversion
+  - 16 kHz mono WAV normalization
+  - VAD (Voice Activity Detection)
+  - 2s chunking for live mode
+- ASR integration:
+  - faster-whisper (base or small model, int8 quantized)
+  - Timestamped segment generation
+  - Language detection
+  - Handle ASR failures gracefully
+- Voice layer (parallel processing):
+  - Quality gate (duration, SNR, clipping detection)
+  - AASIST or wav2vec2 integration for spoof detection
+  - ECAPA-TDNN for voiceprint matching
+  - Return VoiceEvidence JSON
+- Storage management:
+  - Secure file storage with UUID naming
+  - Cleanup of temporary files
+  - Handle large file uploads (streaming)
+- Job state management:
+  - queued → processing → completed/failed
+  - Database persistence
+  - Error logging
+
+---
+
+### Member 3 — AI Agents + Trust Engine
+
+**Owns:** `backend/agents/`, `backend/knowledge/`, `backend/trust_engine/`, `backend/actions/`
+
+**Responsibilities:**
+- Implement Claim, Request and Behavior agents
+- Add Trust Graph, Kill-Chain Tracker and curated RAG
+- Implement Fraud/Skeptic orchestration using LangGraph
+- Define category caps, additive scoring and hard-rule floors
+- Implement Verification and Guardian outputs
+
+**Deliverable:**  
+A tested analysis engine that produces explainable and repeatable decisions.
+
+**Key Tasks:**
+- Evidence Extraction Agents:
+  - **Tier 1:** Regex patterns + TF-IDF/LogReg classifier
+    - Instant detection of OTP, money, urgency keywords
+    - Hinglish pattern detection
+  - **Tier 2:** LLM extractors (with fallback)
+    - Claim Agent: Extract identity claims with quotes
+    - Request Agent: Extract sensitive requests with context
+    - Behavior Agent: Detect urgency, secrecy, pressure
+    - Each finding must cite quote + timestamp
+    - Pydantic validation for all outputs
+- Trust Graph Implementation:
+  - SQLite schema + NetworkX graph
+  - Contacts: name, relation, saved_numbers, safe_word_hash, voiceprint_embedding
+  - Organizations: official_numbers, official_app
+  - Channel status logic (VERIFIED/MISMATCH/UNKNOWN)
+  - Contradiction detection (claim vs saved contact)
+- Kill-Chain FSM:
+  - Track progression: Contact → Trust → Urgency → Request → Secrecy
+  - Detect stage-skipping (abnormal patterns)
+- RAG System:
+  - ChromaDB setup
+  - Ingest ~20 curated scam pattern documents
+  - Top-3 retrieval with threshold
+  - Citation tracking
+- Trust Judge (Deterministic):
+  - Category scoring with caps:
+    - Identity/Relationship: 25 points
+    - Sensitive Request: 30 points
+    - Behavioral Pressure: 20 points
+    - Channel Inconsistency: 15 points
+    - Voice: 10 points
+  - Hard-rule floors:
+    - OTP/PIN on non-VERIFIED → ≥75
+    - Money + secrecy + MISMATCH → ≥50
+    - Relative + non-VERIFIED + spoof ≥0.80 → ≥50
+    - VERIFIED + no sensitive request → ≤24
+  - Reason generation (template-based, not LLM-generated)
+  - Counterfactual computation (re-run with changed inputs)
+  - Audit hash generation
+- Fraud vs Skeptic Orchestration (Optional):
+  - LangGraph implementation
+  - Advisory only (MEDIUM band)
+  - Cannot change score
+- Action Layer:
+  - Cross-channel verification prompts
+  - Guardian alert generation
+  - One-tap confirmation links
+
+---
+
+### Member 4 — Web Dashboard + Evaluation
+
+**Owns:** `web-dashboard/`, `tests/`, integration documentation
+
+**Responsibilities:**
+- Build the Streamlit dashboard
+- Show transcript, agent findings, risk level and kill-chain progression
+- Add report history, report export and evaluation metrics
+- Create legitimate and scam test scenarios, including Hinglish
+- Run end-to-end tests and coordinate demo preparation
+
+**Deliverable:**  
+A working dashboard plus evidence that the pipeline has been tested.
+
+**Key Tasks:**
+- Streamlit Dashboard Pages:
+  - **Home:** Backend health, statistics, phase notice
+  - **Upload:** File uploader with progress and status polling
+  - **Analysis Results:**
+    - Risk level display with color coding
+    - Mock/real analysis badge
+    - Transcript with clickable timestamps
+    - Agent findings table (expandable)
+    - Voice detection card (if available)
+    - Kill-chain progression stepper
+    - Reasons list (click to jump to evidence)
+    - Counterfactual explanations
+    - Recommended actions
+    - Warnings and limitations
+  - **History:** List all analyses with filters and search
+  - **About:** Project info and documentation links
+- API Client:
+  - `api_client.py` with all endpoint wrappers
+  - Error handling and retry logic
+  - Connection status monitoring
+- Report Export:
+  - JSON export
+  - PDF export (if time permits)
+- Test Scenarios:
+  - Create `scenarios.json` with:
+    - 5 scam scenarios (bank, family emergency, KYC, authority, investment)
+    - 2 legitimate scenarios (known contact, expected callback)
+  - Include Hinglish examples
+  - Cover all risk levels (Low, Medium, High, Critical)
+- Evaluation & Testing:
+  - End-to-end integration tests
+  - Measure and document:
+    - WER on English/Hindi/Hinglish samples
+    - Latency (Tier 1, full analysis, time to first HIGH)
+    - Precision/recall for Tier 1 classifier
+    - Voice detection rates (clean vs phone-quality)
+  - Create evaluation report with tables and charts
+- Demo Coordination:
+  - Prepare 3-minute demo script
+  - Test all demo scenarios
+  - Create backup video recording
+  - Coordinate with all team members for demo readiness
+- Documentation:
+  - Integration testing guide
+  - Demo instructions
+  - Known issues and workarounds
+  - Performance metrics report
+
+---
+
+### Coordination Points
+
+**Daily Standups:**
+- What did you complete yesterday?
+- What will you work on today?
+- Any blockers?
+
+**Integration Checkpoints:**
+- **Hour 6:** All modules work standalone
+- **Hour 10:** Thin loop functional (simulated transcript → report)
+- **Hour 14:** Full context integration complete
+- **Hour 17:** End-to-end pipeline working
+- **Hour 19:** All tests passing, measurements documented
+
+**Communication:**
+- Shared `models.py` - coordinate schema changes
+- API contract changes - notify all members
+- Blocking issues - escalate immediately
+- Testing - coordinate shared test resources
+
+**Pre-Demo Checklist:**
+- [ ] M1: Android app tested on physical device
+- [ ] M2: Backend stable, no crashes in 30-minute run
+- [ ] M3: All 7 scenarios produce correct risk levels
+- [ ] M4: Dashboard displays all features, demo rehearsed
+- [ ] All: Fresh clone test passed
+- [ ] All: Backup video recorded
+
+---
+
 ## Summary of v3 Changes
 
 1. ✅ **Voice-clone detection added as real evidence layer**
