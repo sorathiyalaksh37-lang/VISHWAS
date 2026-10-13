@@ -64,11 +64,12 @@ function App() {
   // Reset the report sub-view when navigating away from the analyse page
   function handleNavigate(item: NavItem) {
     setActiveItem(item)
-    if (item !== 'analyse') {
+    if (item !== 'analyse' && item !== 'history') {
       setShowReport(false)
       setSelectedCallId(null)
     }
   }
+
 
   function renderPage() {
     switch (activeItem) {
@@ -83,11 +84,16 @@ function App() {
           <AnalyseACall onViewReport={(callId) => { setSelectedCallId(callId); setShowReport(true) }} />
         )
       case 'history':
-        return <CallHistory />
+        return showReport ? (
+          <AnalysisReport callId={selectedCallId || undefined} onBack={() => { setShowReport(false); setSelectedCallId(null) }} />
+        ) : (
+          <CallHistory onViewReport={(callId) => { setSelectedCallId(callId); setShowReport(true) }} />
+        )
       case 'settings':
         return <PrivacySettings />
     }
   }
+
 
   return (
     <Shell activeItem={activeItem} onNavigate={handleNavigate}>

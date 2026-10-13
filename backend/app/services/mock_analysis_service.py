@@ -32,36 +32,43 @@ class MockAnalysisService:
         self.analysis_mode = "mock"
     
     def _get_suspicious_scenario(self) -> Dict:
-        """Generate a suspicious call scenario."""
+        """Generate a suspicious call scenario — CRITICAL threat level with v3 schema."""
         return {
             "language": "en",
             "transcript_segments": [
                 {
                     "start": 0.0,
-                    "end": 3.5,
-                    "speaker": None,
-                    "text": "Hello, this is calling from bank security department.",
+                    "end": 4.2,
+                    "speaker": "CALLER",
+                    "text": "Good after Mr. Sharma, I'm a Police Officer from Cyber Security Cell. My badge number is PP-4471.",
                     "language": "en"
                 },
                 {
-                    "start": 3.8,
-                    "end": 6.2,
-                    "speaker": None,
-                    "text": "We have detected suspicious activity on your account.",
+                    "start": 4.5,
+                    "end": 9.1,
+                    "speaker": "CALLER",
+                    "text": "We have detected a fraudulent transaction of \u20b950,000 from your account to a flagged account linked to money laundering.",
                     "language": "en"
                 },
                 {
-                    "start": 6.5,
-                    "end": 9.0,
-                    "speaker": None,
-                    "text": "Please share your OTP immediately to verify your identity.",
+                    "start": 9.4,
+                    "end": 13.8,
+                    "speaker": "VICTIM",
+                    "text": "Hello? What? I didn't receive any notification regarding this.",
                     "language": "en"
                 },
                 {
-                    "start": 9.3,
-                    "end": 11.5,
-                    "speaker": None,
-                    "text": "This is urgent. Your account will be blocked in 10 minutes.",
+                    "start": 14.1,
+                    "end": 18.9,
+                    "speaker": "CALLER",
+                    "text": "Sir, for your account safety and my OTP has a transaction reference of \u20b950,000. I need you to read out the 6-digit code right now, police complaint 420 will be lodged and your account certificate is in \u20b950,000.",
+                    "language": "en"
+                },
+                {
+                    "start": 19.2,
+                    "end": 23.5,
+                    "speaker": "CALLER",
+                    "text": "My SMS says: Do not share this OTP with anyone including bank staff. Read out the 6 digit code received on your mobile screen now.",
                     "language": "en"
                 }
             ],
@@ -69,115 +76,104 @@ class MockAnalysisService:
                 {
                     "agent": "impersonation_agent",
                     "signal": "authority_impersonation",
-                    "severity": "high",
-                    "evidence_text": "Hello, this is calling from bank security department.",
+                    "severity": "critical",
+                    "evidence_text": "I'm a Police Officer from Cyber Security Cell. My badge number is PP-4471.",
                     "start_time": 0.0,
-                    "end_time": 3.5,
-                    "confidence": None,
+                    "end_time": 4.2,
+                    "confidence": 0.96,
                     "source": "mock"
                 },
                 {
                     "agent": "threat_agent",
                     "signal": "urgency_tactic",
-                    "severity": "medium",
-                    "evidence_text": "This is urgent. Your account will be blocked in 10 minutes.",
-                    "start_time": 9.3,
-                    "end_time": 11.5,
-                    "confidence": None,
+                    "severity": "high",
+                    "evidence_text": "police complaint 420 will be lodged and your account certificate is in \u20b950,000.",
+                    "start_time": 14.1,
+                    "end_time": 18.9,
+                    "confidence": 0.91,
                     "source": "mock"
                 },
                 {
                     "agent": "request_agent",
-                    "signal": "sensitive_credential_request",
+                    "signal": "otp_solicitation",
                     "severity": "critical",
-                    "evidence_text": "Please share your OTP immediately to verify your identity.",
-                    "start_time": 6.5,
-                    "end_time": 9.0,
-                    "confidence": None,
+                    "evidence_text": "Read out the 6 digit code received on your mobile screen now.",
+                    "start_time": 19.2,
+                    "end_time": 23.5,
+                    "confidence": 0.99,
+                    "source": "mock"
+                },
+                {
+                    "agent": "deepfake_agent",
+                    "signal": "synthetic_voice_detected",
+                    "severity": "high",
+                    "evidence_text": "Real-time voice synthesis markers detected — spectral artifacts at 3.2kHz, GAN fingerprint probability 84.2%",
+                    "start_time": 0.0,
+                    "end_time": 23.5,
+                    "confidence": 0.84,
                     "source": "mock"
                 }
             ],
-            "risk_level": "HIGH",
-            "risk_score": 85,
+            "risk_level": "CRITICAL",
+            "risk_score": 86,
             "category_scores": {
                 "identity": 23,
-                "request": 28,
-                "behavior": 18,
-                "channel": 12,
-                "voice": 8
+                "request": 29,
+                "behavior": 19,
+                "channel": 10,
+                "voice": 9
             },
             "fired_rules": [
                 "authority_impersonation",
+                "otp_request_detected",
+                "urgency_language",
+                "legal_threat_coercion",
+                "synthetic_voice_marker",
+                "police_impersonation",
                 "credential_request_otp",
-                "urgency_time_pressure",
-                "threat_account_blocking"
+                "killchain_stage_execution"
             ],
-            "killchain_stage": "execution",
+            "killchain_stage": "Elicitation",
             "voice_data": {
-                "spoof_probability": 0.72,
-                "confidence": 0.88,
-                "is_likely_synthetic": True,
+                "status": "ok",
+                "spoof_prob": 0.842,
+                "windows_analyzed": 23,
+                "speaker_match": {
+                    "claimed_contact": None,
+                    "similarity": 0.11,
+                    "enrolled": False
+                },
                 "quality": {
-                    "snr_db": 18.5,
-                    "overall": "medium"
-                }
+                    "duration_s": 23.5,
+                    "snr_db": 18.5
+                },
+                "model": "speechbrain/spkrec-ecapa-voxceleb (mock)"
             },
             "verification": {
-                "recommended_steps": [
-                    "callback_verification",
-                    "safe_word_challenge",
-                    "two_channel_confirmation"
-                ],
-                "safe_actions": [
-                    "Hang up and call back using official number",
-                    "Verify through independent channel (email, app)"
-                ],
-                "danger_actions": [
-                    "Sharing OTP or passwords",
-                    "Making immediate transfers",
-                    "Downloading software"
-                ]
+                "action": "callback_official_number",
+                "target": "Cyber Cell Helpline 1930 or your bank's official number",
+                "safe_word_prompt": True
             },
-            "timeline": [
-                {
-                    "timestamp": 0.0,
-                    "event": "call_start",
-                    "description": "Call initiated"
-                },
-                {
-                    "timestamp": 0.0,
-                    "event": "authority_claim",
-                    "description": "Caller claims to be from bank security"
-                },
-                {
-                    "timestamp": 3.8,
-                    "event": "threat_introduced",
-                    "description": "Mentions suspicious activity on account"
-                },
-                {
-                    "timestamp": 6.5,
-                    "event": "credential_request",
-                    "description": "Requests OTP"
-                },
-                {
-                    "timestamp": 9.3,
-                    "event": "urgency_escalation",
-                    "description": "Creates time pressure (10 minute deadline)"
-                }
+            "counterfactuals": [
+                {"change": "If call originated from verified government number", "new_score": 32},
+                {"change": "If caller did not request OTP", "new_score": 41},
+                {"change": "If voice was not synthetic", "new_score": 55}
             ],
             "reasons": [
-                "Authority impersonation detected (bank security claim)",
-                "Sensitive credential request (OTP)",
-                "Urgency tactics employed to pressure immediate action",
-                "Threat of account blocking to create fear",
-                "Voice analysis suggests possible synthetic/spoofed audio"
+                "Coercive authority impersonation — caller claims to be Cyber Cell police officer with badge PP-4471",
+                "OTP solicitation detected — explicitly asked to read out 6-digit code from SMS",
+                "Legal threat coercion — threatened FIR/police complaint to force compliance",
+                "Real-time deepfake voice signature — 84.2% synthetic probability with GAN markers",
+                "Urgency language — immediate action demanded to prevent account freeze",
+                "Kill-chain stage: Elicitation — active credential harvesting in progress"
             ],
             "recommended_actions": [
-                "Do not share OTP or any sensitive information with this caller",
-                "Hang up immediately and contact your bank directly using official channels",
-                "Verify the caller's identity through independent means",
-                "Report this incident to your bank's fraud department",
-                "Banks never ask for OTP or passwords over the phone"
+                "HANG UP IMMEDIATELY — Do not share the OTP under any circumstances",
+                "Call back the Cyber Crime Helpline at 1930 to verify legitimacy",
+                "Contact your bank directly using the official number on their website or card",
+                "Never share OTP with anyone claiming to be police, bank, or government",
+                "Report this number to cybercrime.gov.in and TRAI DND registry",
+                "Screenshot and save the caller's number for reporting"
             ]
         }
     
