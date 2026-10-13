@@ -79,6 +79,17 @@ def client(test_db, test_upload_dir):
     app_no_lifespan.include_router(analyze.router, prefix="/api/v1", tags=["Analysis"])
     app_no_lifespan.include_router(calls.router, prefix="/api/v1", tags=["Calls (legacy)"])
     
+    # Add root endpoint
+    @app_no_lifespan.get("/")
+    async def root():
+        """Root endpoint for testing."""
+        from app.core.config import settings
+        return {
+            "message": "VISHWAS API",
+            "version": settings.app_version,
+            "docs": "/docs"
+        }
+    
     def override_get_db():
         try:
             yield test_db
