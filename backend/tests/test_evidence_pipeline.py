@@ -30,19 +30,19 @@ class TestEvidencePipelineIntegration:
                     start=2.0,
                     end=5.0,
                     speaker="caller",
-                    text="I am calling from your bank"
+                    text="I am calling from your bank", is_final=True
                 ),
                 TranscriptSegment(
                     start=6.0,
                     end=9.0,
                     speaker="caller",
-                    text="Your account will be blocked immediately"
+                    text="Your account will be blocked immediately", is_final=True
                 ),
                 TranscriptSegment(
                     start=10.0,
                     end=13.0,
                     speaker="caller",
-                    text="Please tell me your OTP to verify"
+                    text="Please tell me your OTP to verify", is_final=True
                 ),
             ],
             is_mock=True
@@ -87,13 +87,13 @@ class TestEvidencePipelineIntegration:
                     start=2.0,
                     end=5.0,
                     speaker="caller",
-                    text="Hi, I wanted to check on the delivery"
+                    text="Hi, I wanted to check on the delivery", is_final=True
                 ),
                 TranscriptSegment(
                     start=6.0,
                     end=9.0,
                     speaker="caller",
-                    text="It should arrive tomorrow afternoon"
+                    text="It should arrive tomorrow afternoon", is_final=True
                 ),
             ],
             is_mock=True
@@ -122,7 +122,7 @@ class TestEvidencePipelineIntegration:
                     start=2.0,
                     end=5.0,
                     speaker="caller",
-                    text="Mummy bol rahi hoon"
+                    text="Mummy bol rahi hoon", is_final=True
                 ),
             ],
             is_mock=True
@@ -181,13 +181,13 @@ class TestEvidencePipelineIntegration:
                     start=5.0,
                     end=8.0,
                     speaker="caller",
-                    text="OTP bata do jaldi, account band ho jayega"
+                    text="OTP bata do jaldi, account band ho jayega", is_final=True
                 ),
                 TranscriptSegment(
                     start=9.0,
                     end=12.0,
                     speaker="caller",
-                    text="50000 rupaye bhej do turant"
+                    text="50000 rupaye bhej do turant", is_final=True
                 ),
             ],
             is_mock=True
@@ -212,19 +212,19 @@ class TestEvidencePipelineIntegration:
                     start=2.0,
                     end=5.0,
                     speaker="caller",
-                    text="Mummy bol rahi hoon beta, emergency hai"
+                    text="Mummy bol rahi hoon beta, emergency hai", is_final=True
                 ),
                 TranscriptSegment(
                     start=6.0,
                     end=9.0,
                     speaker="caller",
-                    text="50000 rupaye bhej do abhi ke abhi"
+                    text="50000 rupaye bhej do abhi ke abhi", is_final=True
                 ),
                 TranscriptSegment(
                     start=10.0,
                     end=13.0,
                     speaker="caller",
-                    text="Kisi ko mat batana yeh baat"
+                    text="Kisi ko mat batana yeh baat", is_final=True
                 ),
             ],
             is_mock=True
@@ -256,7 +256,7 @@ class TestStreamingExtraction:
                 start=5.0,
                 end=7.0,
                 speaker="caller",
-                text="Tell me your OTP"
+                text="Tell me your OTP", is_final=True
             )
         ]
         
@@ -276,7 +276,7 @@ class TestStreamingExtraction:
                 start=5.0,
                 end=7.0,
                 speaker="caller",
-                text="Tell me your OTP"
+                text="Tell me your OTP", is_final=True
             )
         ]
         
@@ -306,7 +306,7 @@ class TestStreamingExtraction:
                 start=2.0,
                 end=4.0,
                 speaker="caller",
-                text="I am calling from your bank"
+                text="I am calling from your bank", is_final=True
             )
         ]
         
@@ -315,7 +315,7 @@ class TestStreamingExtraction:
                 start=5.0,
                 end=7.0,
                 speaker="caller",
-                text="Your account will be blocked"
+                text="Your account will be blocked", is_final=True
             )
         ]
         
@@ -324,7 +324,7 @@ class TestStreamingExtraction:
                 start=8.0,
                 end=10.0,
                 speaker="caller",
-                text="Tell me your OTP immediately"
+                text="Tell me your OTP immediately", is_final=True
             )
         ]
         
@@ -353,7 +353,7 @@ class TestExtractionSummary:
                     start=2.0,
                     end=5.0,
                     speaker="caller",
-                    text="I am your mother, send 25000 rupees urgently"
+                    text="I am your mother, send 25000 rupees urgently", is_final=True
                 ),
             ],
             is_mock=True
@@ -386,7 +386,7 @@ class TestEdgeCases:
                     start=0.0,
                     end=0.1,
                     speaker=None,
-                    text="  "  # Whitespace only
+                    text="  ", is_final=True  # Whitespace only
                 ),
             ],
             is_mock=True
@@ -435,13 +435,13 @@ class TestEdgeCases:
                     start=2.0,
                     end=5.0,
                     speaker="caller",
-                    text="Hello, main bank se call kar raha hoon"
+                    text="Hello, main bank se call kar raha hoon", is_final=True
                 ),
                 TranscriptSegment(
                     start=6.0,
                     end=9.0,
                     speaker="caller",
-                    text="Please aap apna OTP bataiye"
+                    text="Please aap apna OTP bataiye", is_final=True
                 ),
             ],
             is_mock=True
@@ -468,19 +468,19 @@ class TestQualityMetrics:
                     start=2.0,
                     end=5.0,
                     speaker="caller",
-                    text="I am calling from HDFC bank"
+                    text="I am calling from HDFC bank", is_final=True
                 ),
                 TranscriptSegment(
                     start=6.0,
                     end=9.0,
                     speaker="caller",
-                    text="Tell me your OTP and PIN"
+                    text="Tell me your OTP and PIN", is_final=True
                 ),
                 TranscriptSegment(
                     start=10.0,
                     end=13.0,
                     speaker="caller",
-                    text="Send 100000 rupees immediately or account will be blocked"
+                    text="Send 100000 rupees immediately or account will be blocked", is_final=True
                 ),
             ],
             is_mock=True
@@ -503,7 +503,7 @@ class TestQualityMetrics:
                     start=1.0,
                     end=2.0,
                     speaker="caller",
-                    text="Bonjour"
+                    text="Bonjour", is_final=True
                 ),
             ],
             is_mock=True

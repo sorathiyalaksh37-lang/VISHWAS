@@ -42,6 +42,7 @@ class RiskAssessment:
     # Recommendations
     verification_method: Optional[str] = None
     verification_details: Optional[Dict[str, Any]] = None
+    killchain_stage: Optional[str] = None  # Phase 5: Added killchain detection
     
     # Metadata
     assessment_timestamp: datetime = field(default_factory=datetime.utcnow)
@@ -68,6 +69,7 @@ class RiskAssessment:
             "transcript_segments_analyzed": self.transcript_segments_analyzed,
             "verification_method": self.verification_method,
             "verification_details": self.verification_details,
+            "killchain_stage": self.killchain_stage,  # Phase 5
             "assessment_timestamp": self.assessment_timestamp.isoformat(),
             "extractor_version": self.extractor_version,
             "scorer_version": self.scorer_version,
@@ -144,6 +146,9 @@ class TrustJudge:
         # Collect warnings
         warnings = self._collect_warnings(evidence, trust_context)
         
+        # Detect killchain stage (Phase 5: Task 2)
+        killchain_stage = self._detect_killchain_stage(evidence, trust_context)
+        
         # Build assessment
         assessment = RiskAssessment(
             call_id=call_id,
@@ -164,6 +169,7 @@ class TrustJudge:
             transcript_segments_analyzed=evidence.transcript_segments_analyzed,
             verification_method=verification_method,
             verification_details=verification_details,
+            killchain_stage=killchain_stage,  # Phase 5: Added
             extractor_version=evidence.extractor_version,
             warnings=warnings,
         )
@@ -268,6 +274,49 @@ class TrustJudge:
             warnings.append("Evidence quality below optimal threshold")
         
         return warnings
+    
+    def _detect_killchain_stage(
+        self,
+        evidence: EvidenceExtraction,
+        trust_context: Dict,
+    ) -> Optional[str]:
+        """
+        Detect the current stage in the cyber killchain for scam calls.
+        
+        Standard scam killchain stages:
+        1. RECONNAISSANCE - Information gathering
+        2. IMPERSONATION - Establishing fake identity
+        3. MANIPULATION - Building trust/urgency/pressure
+        4. REQUEST - Requesting sensitive data or money
+        5. EXFILTRATION - Obtaining the target resource
+        
+        Returns:
+            Killchain stage name or None if indeterminate
+        """
+        # Stage detection based on evidence patterns
+        has_claims = evidence.claims and evidence.claims.claims
+        has_money_request = evidence.requests and evidence.requests.money_requests
+        has_credential_request = evidence.requests and evidence.requests.credential_requests
+        has_action_request = evidence.requests and evidence.requests.action_requests
+        has_pressure = evidence.behavior and evidence.behavior.has_pressure_tactics
+        
+        # Stage 4: REQUEST - Direct request for sensitive data
+        if has_credential_request or has_money_request or has_action_request:
+            return "REQUEST"
+        
+        # Stage 3: MANIPULATION - Pressure tactics without request yet
+        if has_pressure and has_claims:
+            return "MANIPULATION"
+        
+        # Stage 2: IMPERSONATION - Identity claim without pressure or requests
+        if has_claims:
+            return "IMPERSONATION"
+        
+        # Stage 1: RECONNAISSANCE - No clear identity claim or request
+        if evidence.transcript_segments_analyzed > 0:
+            return "RECONNAISSANCE"
+        
+        return None
     
     def _generate_audit_hash(
         self,

@@ -25,7 +25,7 @@ class TestTier1CredentialDetection:
                 start=5.0,
                 end=8.0,
                 speaker="caller",
-                text="Please tell me your OTP to verify your account"
+                text="Please tell me your OTP to verify your account", is_final=True
             )
         ]
         
@@ -44,7 +44,7 @@ class TestTier1CredentialDetection:
                 start=10.0,
                 end=13.0,
                 speaker="caller",
-                text="Enter your ATM PIN to complete the transaction"
+                text="Enter your ATM PIN to complete the transaction", is_final=True
             )
         ]
         
@@ -62,7 +62,7 @@ class TestTier1CredentialDetection:
                 start=15.0,
                 end=18.0,
                 speaker="caller",
-                text="What is your account password for verification?"
+                text="What is your account password for verification?", is_final=True
             )
         ]
         
@@ -80,7 +80,7 @@ class TestTier1CredentialDetection:
                 start=5.0,
                 end=8.0,
                 speaker="caller",
-                text="OTP bata do jaldi please"
+                text="OTP bata do jaldi please", is_final=True
             )
         ]
         
@@ -102,7 +102,7 @@ class TestTier1MoneyDetection:
                 start=20.0,
                 end=23.0,
                 speaker="caller",
-                text="Please send 50000 rupees immediately"
+                text="Please send 50000 rupees immediately", is_final=True
             )
         ]
         
@@ -120,7 +120,7 @@ class TestTier1MoneyDetection:
                 start=25.0,
                 end=28.0,
                 speaker="caller",
-                text="50000 rupaye bhej do turant"
+                text="50000 rupaye bhej do turant", is_final=True
             )
         ]
         
@@ -137,7 +137,7 @@ class TestTier1MoneyDetection:
                 start=20.0,
                 end=23.0,
                 speaker="caller",
-                text="Transfer 25000 rupees to my account"
+                text="Transfer 25000 rupees to my account", is_final=True
             )
         ]
         
@@ -159,7 +159,7 @@ class TestTier1NegationDetection:
                 start=5.0,
                 end=8.0,
                 speaker="caller",
-                text="Never share your OTP with anyone"
+                text="Never share your OTP with anyone", is_final=True
             )
         ]
         
@@ -177,7 +177,7 @@ class TestTier1NegationDetection:
                 start=10.0,
                 end=13.0,
                 speaker="caller",
-                text="Don't tell anyone your password"
+                text="Don't tell anyone your password", is_final=True
             )
         ]
         
@@ -194,7 +194,7 @@ class TestTier1NegationDetection:
                 start=5.0,
                 end=8.0,
                 speaker="caller",
-                text="OTP kisi ko mat batana"
+                text="OTP kisi ko mat batana", is_final=True
             )
         ]
         
@@ -215,7 +215,7 @@ class TestTier1ClaimExtraction:
                 start=2.0,
                 end=5.0,
                 speaker="caller",
-                text="I am your mother calling from a new number"
+                text="I am your mother calling from a new number", is_final=True
             )
         ]
         
@@ -234,7 +234,7 @@ class TestTier1ClaimExtraction:
                 start=2.0,
                 end=5.0,
                 speaker="caller",
-                text="Mummy bol rahi hoon beta"
+                text="Mummy bol rahi hoon beta", is_final=True
             )
         ]
         
@@ -252,7 +252,7 @@ class TestTier1ClaimExtraction:
                 start=2.0,
                 end=5.0,
                 speaker="caller",
-                text="I am calling from HDFC bank regarding your account"
+                text="I am calling from HDFC bank regarding your account", is_final=True
             )
         ]
         
@@ -270,7 +270,7 @@ class TestTier1ClaimExtraction:
                 start=2.0,
                 end=5.0,
                 speaker="caller",
-                text="This is Inspector Kumar from the police station"
+                text="This is Inspector Kumar from the police station", is_final=True
             )
         ]
         
@@ -292,7 +292,7 @@ class TestTier1BehaviorExtraction:
                 start=10.0,
                 end=13.0,
                 speaker="caller",
-                text="This is urgent! You must act immediately or your account will be blocked"
+                text="This is urgent! You must act immediately or your account will be blocked", is_final=True
             )
         ]
         
@@ -310,7 +310,7 @@ class TestTier1BehaviorExtraction:
                 start=15.0,
                 end=18.0,
                 speaker="caller",
-                text="Don't tell anyone about this transaction"
+                text="Don't tell anyone about this transaction", is_final=True
             )
         ]
         
@@ -327,7 +327,7 @@ class TestTier1BehaviorExtraction:
                 start=15.0,
                 end=18.0,
                 speaker="caller",
-                text="Kisi ko mat batana yeh baat"
+                text="Kisi ko mat batana yeh baat", is_final=True
             )
         ]
         
@@ -343,7 +343,7 @@ class TestTier1BehaviorExtraction:
                 start=10.0,
                 end=13.0,
                 speaker="caller",
-                text="Legal action will be taken against you if you don't pay"
+                text="Legal action will be taken against you if you don't pay", is_final=True
             )
         ]
         
@@ -371,8 +371,8 @@ class TestTier1EdgeCases:
         """Should handle segments with empty text."""
         classifier = Tier1Classifier()
         segments = [
-            TranscriptSegment(start=1.0, end=2.0, speaker="caller", text=""),
-            TranscriptSegment(start=2.0, end=3.0, speaker="caller", text="   "),
+            TranscriptSegment(start=1.0, end=2.0, speaker="caller", text="", is_final=True),
+            TranscriptSegment(start=2.0, end=3.0, speaker="caller", text="   ", is_final=True),
         ]
         
         result = classifier.classify(segments)
@@ -389,7 +389,7 @@ class TestTier1EdgeCases:
             start=5.0,
             end=8.0,
             speaker="caller",
-            text="Tell me your OTP"
+            text="Tell me your OTP", is_final=True
         )
         
         result1 = classifier.classify([segment])
@@ -409,7 +409,7 @@ class TestTier1EdgeCases:
                 start=10.0,
                 end=15.0,
                 speaker="caller",
-                text="Tell me your OTP and send 50000 rupees immediately"
+                text="Tell me your OTP and send 50000 rupees immediately", is_final=True
             )
         ]
         
@@ -429,7 +429,7 @@ class TestTier1EdgeCases:
             start=5.0,
             end=8.0,
             speaker="caller",
-            text="Tell me your OTP"
+            text="Tell me your OTP", is_final=True
         )
         
         result1 = classifier.classify([segment])
@@ -455,7 +455,7 @@ class TestTier1LegitimateConversations:
                 start=5.0,
                 end=8.0,
                 speaker="caller",
-                text="I went to the bank yesterday to deposit money"
+                text="I went to the bank yesterday to deposit money", is_final=True
             )
         ]
         
@@ -473,7 +473,7 @@ class TestTier1LegitimateConversations:
                 start=10.0,
                 end=13.0,
                 speaker="caller",
-                text="I sent you 5000 rupees last week"
+                text="I sent you 5000 rupees last week", is_final=True
             )
         ]
         
@@ -492,7 +492,7 @@ class TestTier1LegitimateConversations:
                 start=5.0,
                 end=8.0,
                 speaker="caller",
-                text="OTP security is important for banking"
+                text="OTP security is important for banking", is_final=True
             )
         ]
         
@@ -510,7 +510,7 @@ class TestTier1LegitimateConversations:
                 start=10.0,
                 end=13.0,
                 speaker="caller",
-                text="We need to finish this now before the meeting"
+                text="We need to finish this now before the meeting", is_final=True
             )
         ]
         

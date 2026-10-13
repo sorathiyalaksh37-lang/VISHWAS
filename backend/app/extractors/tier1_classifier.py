@@ -80,6 +80,9 @@ class Tier1Classifier:
         """
         Classify transcript segments and generate instant signals.
         
+        Phase 1: Respects is_final flag - only committed text triggers definitive rules.
+        Partial/provisional text generates provisional warnings with lower confidence.
+        
         Args:
             segments: List of transcript segments with text and timestamps
             
@@ -93,8 +96,11 @@ class Tier1Classifier:
             if not segment.text or not segment.text.strip():
                 continue
             
+            # Phase 1: Check finality status
+            is_committed = self._is_committed_text(segment)
+            
             # Detect all signal types for this segment
-            segment_signals = self._detect_segment_signals(segment)
+            segment_signals = self._detect_segment_signals(segment, is_committed)
             signals.extend(segment_signals)
         
         # Calculate detection time
@@ -122,32 +128,55 @@ class Tier1Classifier:
         logger.info(f"Tier1 classification complete: {len(signals)} signals, {detection_time_ms:.2f}ms")
         return result
     
-    def _detect_segment_signals(self, segment: TranscriptSegment) -> List[Tier1Signal]:
-        """Detect all signals in a single segment."""
+    def _is_committed_text(self, segment: TranscriptSegment) -> bool:
+        """
+        Determine if segment text is committed/final.
+        
+        Phase 1: Safe default - if finality unknown, treat as partial.
+        Only is_final=True is treated as committed.
+        
+        Returns:
+            True if text is committed and safe to use for definitive rules
+        """
+        if segment.is_final is None:
+            # Unknown finality - treat as partial (safe default)
+            return False
+        return segment.is_final
+    
+    def _detect_segment_signals(self, segment: TranscriptSegment, is_committed: bool) -> List[Tier1Signal]:
+        """
+        Detect all signals in a single segment.
+        
+        Phase 1: For partial text, generate provisional warnings with reduced confidence.
+        """
         signals = []
         text = segment.text
         timestamp = segment.start
         
         # Check for credential requests (CRITICAL)
-        cred_signals = self._detect_credential_requests(text, timestamp)
+        cred_signals = self._detect_credential_requests(text, timestamp, is_committed)
         signals.extend(cred_signals)
         
         # Check for money requests (HIGH)
-        money_signals = self._detect_money_requests(text, timestamp)
+        money_signals = self._detect_money_requests(text, timestamp, is_committed)
         signals.extend(money_signals)
         
         # Check for urgency (MEDIUM/HIGH)
-        urgency_signals = self._detect_urgency(text, timestamp)
+        urgency_signals = self._detect_urgency(text, timestamp, is_committed)
         signals.extend(urgency_signals)
         
         # Check for secrecy (MEDIUM)
-        secrecy_signals = self._detect_secrecy(text, timestamp)
+        secrecy_signals = self._detect_secrecy(text, timestamp, is_committed)
         signals.extend(secrecy_signals)
         
         return signals
     
-    def _detect_credential_requests(self, text: str, timestamp: float) -> List[Tier1Signal]:
-        """Detect credential disclosure requests."""
+    def _detect_credential_requests(self, text: str, timestamp: float, is_committed: bool) -> List[Tier1Signal]:
+        """
+        Detect credential disclosure requests.
+        
+        Phase 1: If not committed, generate provisional warning with reduced confidence.
+        """
         signals = []
         
         for cred_type, patterns in self.credential_patterns.items():
@@ -166,21 +195,40 @@ class Tier1Classifier:
                         continue
                     self._seen_evidence.add(dedup_key)
                     
+                    # Phase 1: Adjust severity and confidence for partial text
+                    if is_committed:
+                        severity = "critical"
+                        final_confidence = confidence
+                        signal_type = f"CREDENTIAL_REQUEST_{cred_type.upper()}"
+                    else:
+                        # Provisional warning for partial text
+                        severity = "medium"  # Downgrade from critical
+                        final_confidence = confidence * 0.6  # Reduce confidence
+                        signal_type = f"PROVISIONAL_CREDENTIAL_REQUEST_{cred_type.upper()}"
+                    
                     signal = Tier1Signal(
-                        signal_type=f"CREDENTIAL_REQUEST_{cred_type.upper()}",
-                        severity="critical",
+                        signal_type=signal_type,
+                        severity=severity,
                         quote=quote,
                         t=timestamp,
                         pattern_matched=pattern_id,
-                        confidence=confidence
+                        confidence=final_confidence
                     )
                     signals.append(signal)
-                    logger.info(f"CRITICAL: Credential request detected - {cred_type} at {timestamp}s")
+                    
+                    if is_committed:
+                        logger.info(f"CRITICAL: Credential request detected - {cred_type} at {timestamp}s")
+                    else:
+                        logger.info(f"PROVISIONAL: Possible credential request - {cred_type} at {timestamp}s (partial text)")
         
         return signals
     
-    def _detect_money_requests(self, text: str, timestamp: float) -> List[Tier1Signal]:
-        """Detect money transfer requests."""
+    def _detect_money_requests(self, text: str, timestamp: float, is_committed: bool) -> List[Tier1Signal]:
+        """
+        Detect money transfer requests.
+        
+        Phase 1: If not committed, generate provisional warning with reduced confidence.
+        """
         signals = []
         
         for pattern, pattern_id, confidence in self.money_patterns:
@@ -197,21 +245,40 @@ class Tier1Classifier:
                     continue
                 self._seen_evidence.add(dedup_key)
                 
+                # Phase 1: Adjust severity and confidence for partial text
+                if is_committed:
+                    severity = "high"
+                    final_confidence = confidence
+                    signal_type = "MONEY_REQUEST"
+                else:
+                    # Provisional warning for partial text
+                    severity = "medium"  # Downgrade from high
+                    final_confidence = confidence * 0.6  # Reduce confidence
+                    signal_type = "PROVISIONAL_MONEY_REQUEST"
+                
                 signal = Tier1Signal(
-                    signal_type="MONEY_REQUEST",
-                    severity="high",
+                    signal_type=signal_type,
+                    severity=severity,
                     quote=quote,
                     t=timestamp,
                     pattern_matched=pattern_id,
-                    confidence=confidence
+                    confidence=final_confidence
                 )
                 signals.append(signal)
-                logger.info(f"HIGH: Money request detected at {timestamp}s")
+                
+                if is_committed:
+                    logger.info(f"HIGH: Money request detected at {timestamp}s")
+                else:
+                    logger.info(f"PROVISIONAL: Possible money request at {timestamp}s (partial text)")
         
         return signals
     
-    def _detect_urgency(self, text: str, timestamp: float) -> List[Tier1Signal]:
-        """Detect urgency and pressure tactics."""
+    def _detect_urgency(self, text: str, timestamp: float, is_committed: bool) -> List[Tier1Signal]:
+        """
+        Detect urgency and pressure tactics.
+        
+        Phase 1: If not committed, generate provisional warning with reduced confidence.
+        """
         signals = []
         
         for pattern, pattern_id, confidence in self.urgency_patterns:
@@ -224,23 +291,38 @@ class Tier1Classifier:
                     continue
                 self._seen_evidence.add(dedup_key)
                 
-                # Determine severity based on pattern type
-                severity = "high" if "THREAT" in pattern_id else "medium"
+                # Determine base severity based on pattern type
+                base_severity = "high" if "THREAT" in pattern_id else "medium"
+                
+                # Phase 1: Adjust for partial text
+                if is_committed:
+                    severity = base_severity
+                    final_confidence = confidence
+                    signal_type = "URGENCY_DETECTED"
+                else:
+                    # Provisional warning for partial text
+                    severity = "low" if base_severity == "medium" else "medium"  # Downgrade severity
+                    final_confidence = confidence * 0.6  # Reduce confidence
+                    signal_type = "PROVISIONAL_URGENCY_DETECTED"
                 
                 signal = Tier1Signal(
-                    signal_type="URGENCY_DETECTED",
+                    signal_type=signal_type,
                     severity=severity,
                     quote=quote,
                     t=timestamp,
                     pattern_matched=pattern_id,
-                    confidence=confidence
+                    confidence=final_confidence
                 )
                 signals.append(signal)
         
         return signals
     
-    def _detect_secrecy(self, text: str, timestamp: float) -> List[Tier1Signal]:
-        """Detect secrecy and isolation tactics."""
+    def _detect_secrecy(self, text: str, timestamp: float, is_committed: bool) -> List[Tier1Signal]:
+        """
+        Detect secrecy and isolation tactics.
+        
+        Phase 1: If not committed, generate provisional warning with reduced confidence.
+        """
         signals = []
         
         for pattern, pattern_id, confidence in self.secrecy_patterns:
@@ -253,13 +335,24 @@ class Tier1Classifier:
                     continue
                 self._seen_evidence.add(dedup_key)
                 
+                # Phase 1: Adjust for partial text
+                if is_committed:
+                    severity = "medium"
+                    final_confidence = confidence
+                    signal_type = "SECRECY_DETECTED"
+                else:
+                    # Provisional warning for partial text
+                    severity = "low"  # Downgrade from medium
+                    final_confidence = confidence * 0.6  # Reduce confidence
+                    signal_type = "PROVISIONAL_SECRECY_DETECTED"
+                
                 signal = Tier1Signal(
-                    signal_type="SECRECY_DETECTED",
-                    severity="medium",
+                    signal_type=signal_type,
+                    severity=severity,
                     quote=quote,
                     t=timestamp,
                     pattern_matched=pattern_id,
-                    confidence=confidence
+                    confidence=final_confidence
                 )
                 signals.append(signal)
         
@@ -268,6 +361,8 @@ class Tier1Classifier:
     def extract_claims(self, segments: List[TranscriptSegment]) -> ClaimsEvidence:
         """
         Extract identity and relationship claims from transcript.
+        
+        Phase 1: Only extracts from committed text. Partial text claims are not reliable.
         
         Args:
             segments: Transcript segments to analyze
@@ -280,6 +375,12 @@ class Tier1Classifier:
         
         for segment in segments:
             if not segment.text or not segment.text.strip():
+                continue
+            
+            # Phase 1: Only process committed text for claims
+            is_committed = self._is_committed_text(segment)
+            if not is_committed:
+                logger.debug(f"Skipping claim extraction from partial text at {segment.start}s")
                 continue
             
             text = segment.text
@@ -329,6 +430,8 @@ class Tier1Classifier:
         """
         Extract sensitive requests from transcript.
         
+        Phase 1: Only extracts from committed text. Partial requests are not reliable.
+        
         Args:
             segments: Transcript segments to analyze
             
@@ -341,6 +444,12 @@ class Tier1Classifier:
         
         for segment in segments:
             if not segment.text or not segment.text.strip():
+                continue
+            
+            # Phase 1: Only process committed text for requests
+            is_committed = self._is_committed_text(segment)
+            if not is_committed:
+                logger.debug(f"Skipping request extraction from partial text at {segment.start}s")
                 continue
             
             text = segment.text
@@ -428,6 +537,9 @@ class Tier1Classifier:
         """
         Extract behavioral evidence (urgency, secrecy, pressure).
         
+        Phase 1: Extracts from both committed and partial text, but flags partial detections.
+        Behavioral patterns can be useful even from partial text as early warnings.
+        
         Args:
             segments: Transcript segments to analyze
             
@@ -452,11 +564,18 @@ class Tier1Classifier:
             
             text = segment.text
             timestamp = segment.start
+            is_committed = self._is_committed_text(segment)
+            
+            # Phase 1: Process both committed and partial, but track finality
+            # Behavioral signals are useful for early warning even if partial
             
             # Detect urgency
             for pattern, pattern_id, confidence in self.urgency_patterns:
                 for match in pattern.finditer(text):
                     quote = match.group().strip()
+                    # Add marker for partial text
+                    if not is_committed:
+                        quote = f"[PARTIAL] {quote}"
                     urgency_quotes.append(quote)
                     urgency_timestamps.append(timestamp)
                     
@@ -472,6 +591,9 @@ class Tier1Classifier:
             for pattern, pattern_id, confidence in self.secrecy_patterns:
                 for match in pattern.finditer(text):
                     quote = match.group().strip()
+                    # Add marker for partial text
+                    if not is_committed:
+                        quote = f"[PARTIAL] {quote}"
                     secrecy_quotes.append(quote)
                     secrecy_timestamps.append(timestamp)
                     
@@ -482,15 +604,16 @@ class Tier1Classifier:
                     elif "ALONE" in pattern_id:
                         secrecy_patterns_found.append("alone")
             
-            # Detect emotional pressure
-            for pressure_type, patterns in self.emotional_patterns.items():
-                for pattern, pattern_id, confidence in patterns:
-                    for match in pattern.finditer(text):
-                        quote = match.group().strip()
-                        emotional_quotes.append(quote)
-                        emotional_timestamps.append(timestamp)
-                        if pressure_type not in pressure_types:
-                            pressure_types.append(pressure_type)
+            # Detect emotional pressure (only from committed text - more nuanced)
+            if is_committed:
+                for pressure_type, patterns in self.emotional_patterns.items():
+                    for pattern, pattern_id, confidence in patterns:
+                        for match in pattern.finditer(text):
+                            quote = match.group().strip()
+                            emotional_quotes.append(quote)
+                            emotional_timestamps.append(timestamp)
+                            if pressure_type not in pressure_types:
+                                pressure_types.append(pressure_type)
         
         # Determine urgency severity
         urgency_severity = "low"

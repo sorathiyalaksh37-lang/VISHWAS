@@ -71,12 +71,12 @@ class DetectionPatterns:
     CREDENTIAL_REQUESTS: Dict[str, PatternList] = {
         "otp": [
             # Requests to share/tell OTP
-            (r"\b(tell|bata|share|bhej|send|give|do|provide|enter)\s+(me\s+)?(your|apna|tumhara|aapka)?\s*(otp|one time password|verification code|code)\b", "CRED_OTP_REQ_1", 0.95),
-            (r"\b(otp|verification code|code)\s+(bata|tell|share|bhej|send|give|do|provide|bataiye)\b", "CRED_OTP_REQ_2", 0.95),
+            (r"\b(tell|bata|batao|bataiye|share|bhej|send|give|do|provide|enter)\s+(me\s+)?(your|apna|tumhara|aapka)?\s*(otp|one time password|verification code|code|o\.?\s*t\.?\s*p\.?)\b", "CRED_OTP_REQ_1", 0.95),
+            (r"\b(otp|verification code|code|o\.?\s*t\.?\s*p\.?)\s+(bata|batao|bataiye|tell|share|bhej|send|give|do|provide)\b", "CRED_OTP_REQ_2", 0.95),
             (r"\b(what|kya|konsa)\s+(is|hai)\s+(your|tumhara|aapka)\s+(otp|verification code|code)\b", "CRED_OTP_REQ_3", 0.95),
             (r"\b(otp|code)\s+(kya|what)\s+(hai|is|aya|aaya|received)\b", "CRED_OTP_REQ_HI_1", 0.95),
-            (r"\b(please\s+)?(read|padho|batao|bolo)\s+(the\s+)?(otp|code|verification)\b", "CRED_OTP_REQ_4", 0.95),
-            (r"\b(apna|aapka|your)\s+(otp|code)\s+(bataiye|bata|tell)\b", "CRED_OTP_REQ_5", 0.95),
+            (r"\b(please\s+)?(read|padho|batao|batao|bolo)\s+(the\s+)?(otp|code|verification)\b", "CRED_OTP_REQ_4", 0.95),
+            (r"\b(apna|aapka|your)\s+(otp|code)\s+(bataiye|batao|bata|tell)\b", "CRED_OTP_REQ_5", 0.95),
             
             # Contextual OTP requests
             (r"\b(need|chahiye|zarurat)\s+(your|tumhara|aapka)\s+(otp|code|verification)\b", "CRED_OTP_REQ_6", 0.9),
@@ -85,8 +85,8 @@ class DetectionPatterns:
         
         "pin": [
             # PIN requests
-            (r"\b(tell|bata|share|bhej|send|give|enter|provide)\s+(me\s+)?(your|apna|tumhara|aapka)?\s*(atm\s+)?(pin|password)\b", "CRED_PIN_REQ_1", 0.95),
-            (r"\b(atm|upi|card)\s+(pin|password)\s+(bata|tell|share|kya|what)\b", "CRED_PIN_REQ_2", 0.95),
+            (r"\b(tell|bata|batao|bataiye|share|bhej|send|give|enter|provide)\s+(me\s+)?(your|apna|tumhara|aapka)?\s*(atm\s+)?(pin|password)\b", "CRED_PIN_REQ_1", 0.95),
+            (r"\b(atm|upi|card)\s+(pin|password)\s+(bata|batao|bataiye|tell|share|kya|what)\b", "CRED_PIN_REQ_2", 0.95),
             (r"\b(enter|type|dal|daalo|dalo)\s+(your|apna|tumhara)?\s*(atm\s+)?(pin|password)\b", "CRED_PIN_REQ_3", 0.9),
         ],
         
@@ -123,17 +123,17 @@ class DetectionPatterns:
     
     MONEY_REQUESTS: PatternList = [
         # Direct money requests
-        (r"\b(send|bhej|bhejo|transfer|de do|dedo|pay|payment)\s+(\d+|some|kuch)?\s*(rupees?|rupaye?|rs\.?|₹|paisa|money|amount)\b", "MONEY_REQ_1", 0.9),
-        (r"\b(\d+)\s*(rupees?|rupaye?|rs\.?|₹)\s+(send|bhej|bhejo|transfer|de do|dedo|chahiye|need)\b", "MONEY_REQ_2", 0.95),
-        (r"\b(money|paisa|amount|rupaye?)\s+(send|bhej|transfer|de do|chahiye|need)\b", "MONEY_REQ_3", 0.85),
+        (r"\b(send|bhej|bhejo|bhejdo|transfer|de do|dedo|pay|payment)\s+(\d+|some|kuch)?\s*(rupees?|rupaye?|rs\.?|₹|paisa|paise|money|amount)\b", "MONEY_REQ_1", 0.9),
+        (r"\b(\d+)\s*(rupees?|rupaye?|rs\.?|₹|paisa|paise)\s+(send|bhej|bhejo|bhejdo|transfer|de do|dedo|chahiye|need)\b", "MONEY_REQ_2", 0.95),
+        (r"\b(money|paisa|paise|amount|rupaye?)\s+(send|bhej|bhejo|transfer|de do|chahiye|need)\b", "MONEY_REQ_3", 0.85),
         
         # UPI/Payment specific
-        (r"\b(upi|paytm|phonepe|gpay|google pay)\s+(se|through|via|from)?\s*(send|bhej|payment|transfer)\b", "MONEY_REQ_UPI_1", 0.9),
+        (r"\b(upi|paytm|phonepe|gpay|google pay)\s+(se|through|via|from)?\s*(send|bhej|bhejo|payment|transfer)\b", "MONEY_REQ_UPI_1", 0.9),
         (r"\b(make|kar|karo|do)\s+(a\s+)?(payment|transaction|transfer)\s+(of\s+)?(\d+)?\b", "MONEY_REQ_4", 0.85),
         
         # Hindi/Hinglish patterns
-        (r"\b(paisa|paise|rupaye)\s+(bhej|de|chahiye|zarurat)\b", "MONEY_REQ_HI_1", 0.9),
-        (r"\b(\d+)\s+(ka|rupaye)\s+(bhej|transfer|payment)\b", "MONEY_REQ_HI_2", 0.9),
+        (r"\b(paisa|paise|rupaye)\s+(bhej|bhejo|de|chahiye|zarurat)\b", "MONEY_REQ_HI_1", 0.9),
+        (r"\b(\d+)\s+(ka|rupaye)\s+(bhej|bhejo|transfer|payment)\b", "MONEY_REQ_HI_2", 0.9),
     ]
     
     # ========================================================================

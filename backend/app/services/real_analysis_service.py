@@ -226,10 +226,36 @@ class RealAnalysisService:
                 risk_score = assessment.score
                 risk_level = assessment.risk_level
                 reasons = assessment.reasons
+                
+                # Build structured verification object per v3 contract
+                verification_obj = None
+                if assessment.verification_method and assessment.verification_details:
+                    verification_obj = {
+                        "action": assessment.verification_method,  # snake_case method
+                        "target": None,
+                        "safe_word_prompt": False  # Default to False, will implement safe word logic later
+                    }
+                    
+                    # Build target string if contact info available
+                    if trust_context.get("contact_found"):
+                        contact_name = trust_context.get("contact_name")
+                        safe_numbers = trust_context.get("verified_numbers", [])
+                        if contact_name and safe_numbers:
+                            # Format: "Mom (saved: +91-98xxxx)"
+                            masked_number = safe_numbers[0][:7] + "xxxx" if safe_numbers else ""
+                            verification_obj["target"] = f"{contact_name} (saved: {masked_number})"
+                        elif contact_name:
+                            verification_obj["target"] = contact_name
+                    
+                    # Could check if contact has safe_word_hash set
+                    # For now, keep as False until safe word validation is implemented
+                
+                # Backward compat: keep recommended_actions
                 recommended_actions = []
                 if assessment.verification_details:
                     recommended_actions.append(assessment.verification_details.get("action", ""))
                     recommended_actions.append(assessment.verification_details.get("recommendation", ""))
+                
                 warnings = assessment.warnings
                 
                 logger.info(
@@ -329,6 +355,14 @@ class RealAnalysisService:
             )
             report.warnings_json = json.dumps(warnings, ensure_ascii=False)
             report.analysis_mode = "real"
+            
+            # Phase 5: Persist v3 Trust Engine fields
+            if 'assessment' in locals() and assessment:
+                report.category_scores_json = json.dumps(assessment.category_scores, ensure_ascii=False)
+                report.fired_rules_json = json.dumps(assessment.fired_rules, ensure_ascii=False)
+                report.killchain_stage = assessment.killchain_stage  # Task 2: Persist killchain stage
+                if 'verification_obj' in locals() and verification_obj:
+                    report.verification_json = json.dumps(verification_obj, ensure_ascii=False)
 
             # ── Step 7: Mark completed ────────────────────────────────────────
             call.status = "completed"

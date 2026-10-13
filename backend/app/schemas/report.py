@@ -14,6 +14,11 @@ class TranscriptSegment(BaseModel):
     text: str = Field(..., description="Transcribed text")
     language: Optional[str] = Field(None, description="Language code (ISO 639-1)")
     
+    # Phase 1: Streaming ASR support
+    is_final: Optional[bool] = Field(None, description="Whether text is committed (True) or partial/provisional (False). None = unknown (treat as partial)")
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="ASR confidence score 0-1, if available")
+    session_id: Optional[str] = Field(None, description="Session/chunk identifier for deduplication")
+    
     @field_validator('end')
     @classmethod
     def end_after_start(cls, v: float, info) -> float:

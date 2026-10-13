@@ -47,6 +47,11 @@ class AnalysisReport(Base):
     recommended_actions_json = Column(Text, nullable=True)
     warnings_json = Column(Text, nullable=True)
     analysis_mode = Column(String(20), nullable=False, default="mock")
+    # v3 Trust Engine fields (Phase 5 audit)
+    category_scores_json = Column(Text, nullable=True)     # CategoryScores JSON
+    fired_rules_json = Column(Text, nullable=True)          # List[str] of rule IDs
+    verification_json = Column(Text, nullable=True)         # Verification JSON
+    killchain_stage = Column(String(50), nullable=True)     # Kill-chain stage name
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationship
