@@ -100,11 +100,11 @@ class MockAnalysisService:
             "risk_level": "HIGH",
             "risk_score": 85,
             "category_scores": {
-                "identity": 0.9,
-                "request": 0.95,
-                "behavior": 0.75,
-                "channel": 0.5,
-                "voice": 0.65
+                "identity": 23,
+                "request": 28,
+                "behavior": 18,
+                "channel": 12,
+                "voice": 8
             },
             "fired_rules": [
                 "authority_impersonation",
@@ -212,11 +212,11 @@ class MockAnalysisService:
             "risk_level": "LOW",
             "risk_score": 12,
             "category_scores": {
-                "identity": 0.1,
-                "request": 0.05,
-                "behavior": 0.15,
-                "channel": 0.2,
-                "voice": 0.1
+                "identity": 2,
+                "request": 1,
+                "behavior": 3,
+                "channel": 2,
+                "voice": 1
             },
             "fired_rules": [],
             "killchain_stage": None,
