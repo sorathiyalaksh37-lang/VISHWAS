@@ -1,6 +1,5 @@
 package com.vishwas.app.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,15 +20,17 @@ fun HistoryScreen(
     onNavigateToResults: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
+    var selectedFilter by remember { mutableStateOf("All") }
+    val filters = listOf("All", "completed", "processing", "queued", "failed")
+
     LaunchedEffect(Unit) {
         viewModel.loadHistory()
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Analysis History") },
+                title = { Text("📋 Analysis History") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -43,91 +44,113 @@ fun HistoryScreen(
             )
         }
     ) { paddingValues ->
-        if (uiState.isLoading) {
-            Box(
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // Status filter chips — horizontal scrollable
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                CircularProgressIndicator()
-            }
-        } else if (uiState.calls.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.History,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "No analyses yet",
-                        style = MaterialTheme.typography.bodyLarge
+                filters.forEach { filter ->
+                    FilterChip(
+                        selected = selectedFilter == filter,
+                        onClick  = { selectedFilter = filter },
+                        label    = { Text(filter.replaceFirstChar { it.uppercaseChar() }) }
                     )
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(uiState.calls) { call ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                if (call.status == "completed") {
-                                    onNavigateToResults(call.callId)
-                                }
-                            }
+
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator() }
+            } else {
+                val filteredCalls = if (selectedFilter == "All") uiState.calls
+                else uiState.calls.filter { it.status == selectedFilter }
+
+                // Total count
+                Text(
+                    text = "Total: ${filteredCalls.size} call(s)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                if (filteredCalls.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = call.originalFilename,
-                                style = MaterialTheme.typography.titleMedium
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val (icon, color) = when (call.status) {
-                                    "completed" -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.primary
-                                    "processing", "queued" -> Icons.Default.HourglassEmpty to MaterialTheme.colorScheme.secondary
-                                    "failed" -> Icons.Default.Error to MaterialTheme.colorScheme.error
-                                    else -> Icons.Default.Help to MaterialTheme.colorScheme.onSurface
+                            Text(
+                                text = if (selectedFilter == "All") "No analyses yet"
+                                       else "No $selectedFilter analyses",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(filteredCalls) { call ->
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(12.dp)
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = call.originalFilename,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        // Full call_id as per Streamlit History screen
+                                        Text(
+                                            text = call.callId,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = call.createdAt.take(16).replace("T", " "),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        StatusChip(call.status)
+                                        // "View Report" only when completed
+                                        if (call.status == "completed") {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            TextButton(
+                                                onClick = { onNavigateToResults(call.callId) }
+                                            ) {
+                                                Text("View Report")
+                                            }
+                                        }
+                                    }
                                 }
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    tint = color,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = "Status: ${call.status}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = color
-                                )
                             }
-                            Text(
-                                text = "Call ID: ${call.callId.take(8)}...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
                     }
                 }

@@ -131,6 +131,14 @@ data class SpeakerMatch(
 )
 
 /**
+ * Audio quality metadata from voice layer
+ */
+data class VoiceQuality(
+    @SerializedName("duration_s") val durationS: Double? = null,
+    @SerializedName("snr_db") val snrDb: Double? = null
+)
+
+/**
  * Voice layer analysis result
  */
 data class VoiceEvidence(
@@ -138,6 +146,7 @@ data class VoiceEvidence(
     @SerializedName("spoof_prob") val spoofProb: Double? = null,
     @SerializedName("windows_analyzed") val windowsAnalyzed: Int? = null,
     @SerializedName("speaker_match") val speakerMatch: SpeakerMatch? = null,
+    @SerializedName("quality") val quality: VoiceQuality? = null,
     @SerializedName("model") val model: String? = null
 )
 

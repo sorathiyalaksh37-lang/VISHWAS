@@ -165,7 +165,8 @@ Manual test workflow:
 
 ## Phase 1 Limitations
 
-- Mock analysis only (not real AI detection)
+- Voice-clone detection is experimental and probabilistic
+- Record screen saves .m4a (AAC) to app cache before upload
 - No authentication
 - HTTP only (no HTTPS)
 - Single user (no user accounts)

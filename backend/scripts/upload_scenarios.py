@@ -15,7 +15,7 @@ ALLOWED = {".wav", ".mp3", ".m4a"}
 
 
 def process_file(client: httpx.Client, path: Path, timeout_s: int) -> dict:
-    row = {"file": path.name, "call_id": "", "status": "", "risk_level": "", "error": ""}
+    row = {"file": path.name, "call_id": "", "status": "", "level": "", "error": ""}
     try:
         with path.open("rb") as fh:
             r = client.post("/calls", files={"file": (path.name, fh, "application/octet-stream")})
@@ -35,7 +35,7 @@ def process_file(client: httpx.Client, path: Path, timeout_s: int) -> dict:
         row["status"] = s["status"]
         if s["status"] == "completed":
             report = client.get(f"/calls/{call_id}/report").json()
-            row["risk_level"] = report["risk_level"]
+            row["level"] = report["level"]
         else:
             row["error"] = s.get("error_message") or ""
     except Exception as exc:
@@ -60,12 +60,12 @@ def main():
     with httpx.Client(base_url=args.base, timeout=60) as client:
         for path in files:
             row = process_file(client, path, args.timeout)
-            print(f"{row['file']:40} {row['status']:10} {row['risk_level']:8} {row['error']}")
+            print(f"{row['file']:40} {row['status']:10} {row['level']:8} {row['error']}")
             rows.append(row)
 
     out_csv = folder / "results.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["file", "call_id", "status", "risk_level", "error"])
+        writer = csv.DictWriter(fh, fieldnames=["file", "call_id", "status", "level", "error"])
         writer.writeheader()
         writer.writerows(rows)
 
