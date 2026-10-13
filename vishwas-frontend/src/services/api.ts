@@ -158,6 +158,30 @@ export interface CallListResponse {
   pagination: PaginationInfo
 }
 
+export interface StreamSessionResponse {
+  session_id: string
+  status: string
+  chunk_size_bytes: number
+  format: string
+  max_duration_minutes: number
+  ttl_minutes: number
+}
+
+export interface StreamChunkResponse {
+  status: string
+  label: string
+  spoof_prob: number
+  confidence: string
+  duration_analyzed_ms: number
+  chunks_processed: number
+}
+
+export interface StreamDeleteResponse {
+  session_id: string
+  status: string
+  message: string
+}
+
 // ── API Client ─────────────────────────────────────────────────────────────────
 
 class APIClient {
@@ -181,6 +205,82 @@ class APIClient {
     }
     
     return headers
+  }
+
+  /**
+   * Start a new voice detection streaming session.
+   */
+  async startVoiceStream(): Promise<StreamSessionResponse | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/voice-detection/stream/start`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+      })
+
+      if (!response.ok) {
+        console.error(`Start voice stream failed: ${response.status}`)
+        return null
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Start voice stream error:', error)
+      return null
+    }
+  }
+
+  /**
+   * Send an audio chunk to the streaming session.
+   */
+  async sendVoiceChunk(sessionId: string, chunk: Blob): Promise<StreamChunkResponse | null> {
+    try {
+      const formData = new FormData()
+      formData.append('chunk', chunk)
+
+      const token = getAuthToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(`${this.baseURL}/voice-detection/stream/${sessionId}/chunk`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+
+      if (!response.ok) {
+        console.error(`Send voice chunk failed: ${response.status}`)
+        return null
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Send voice chunk error:', error)
+      return null
+    }
+  }
+
+  /**
+   * Delete a streaming session (cleanup).
+   */
+  async deleteVoiceStream(sessionId: string): Promise<StreamDeleteResponse | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/voice-detection/stream/${sessionId}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      })
+
+      if (!response.ok) {
+        console.error(`Delete voice stream failed: ${response.status}`)
+        return null
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('Delete voice stream error:', error)
+      return null
+    }
   }
 
   /**

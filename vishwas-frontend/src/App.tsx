@@ -9,6 +9,7 @@ import { CallHistory } from './pages/CallHistory'
 import { Overview } from './pages/Overview'
 import { PrivacySettings } from './pages/PrivacySettings'
 import { TrustGraphPage } from './pages/TrustGraphPage'
+import { VoiceDetectionPage } from './pages/VoiceDetectionPage'
 import type { NavItem } from './components/layout/Sidebar'
 
 const PREFS_KEY = 'vishwas:ui-prefs'
@@ -92,14 +93,13 @@ function App() {
         ) : (
           <CallHistory onViewReport={(callId) => { setSelectedCallId(callId); setShowReport(true) }} />
         )
+      case 'voice-detection':
+        return <VoiceDetectionPage />
       case 'settings':
         return <PrivacySettings />
     }
   }
 
-<<<<<<< HEAD
-
-=======
   // Show loading spinner while checking authentication
   if (isLoading) {
     return (
@@ -118,7 +118,6 @@ function App() {
   }
 
   // Show main app if authenticated
->>>>>>> 3fa6a05 (Save frontend integration changes)
   return (
     <Shell activeItem={activeItem} onNavigate={handleNavigate}>
       {renderPage()}

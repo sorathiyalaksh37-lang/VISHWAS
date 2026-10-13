@@ -1,4 +1,5 @@
 import {
+  ActivityIcon,
   BarChart2,
   ClockIcon,
   GitFork,
@@ -11,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
-export type NavItem = 'overview' | 'trust-graph' | 'analyse' | 'history' | 'settings'
+export type NavItem = 'overview' | 'trust-graph' | 'analyse' | 'history' | 'voice-detection' | 'settings'
 
 interface NavEntry {
   id: NavItem
@@ -39,6 +40,11 @@ const NAV_ITEMS: NavEntry[] = [
     id: 'history',
     label: 'Call History',
     icon: <ClockIcon size={18} aria-hidden="true" />,
+  },
+  {
+    id: 'voice-detection',
+    label: 'Live Voice Detection',
+    icon: <ActivityIcon size={18} aria-hidden="true" />,
   },
   {
     id: 'settings',

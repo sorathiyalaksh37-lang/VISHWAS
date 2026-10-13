@@ -20,6 +20,10 @@ const PAGE_META: Record<NavItem, { title: string; subtitle: string }> = {
     title: 'Call History',
     subtitle: 'Review previously analysed calls and their security findings.',
   },
+  'voice-detection': {
+    title: 'Live Voice Detection',
+    subtitle: 'Real-time streaming voice spoof detection using your microphone.',
+  },
   settings: {
     title: 'Privacy & Settings',
     subtitle: 'Manage data handling policies, connection status, and interface preferences.',
