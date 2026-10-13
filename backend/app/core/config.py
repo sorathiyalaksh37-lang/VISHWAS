@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./vishwas.db"
     
+    # Authentication (Phase 7)
+    secret_key: Optional[str] = None  # REQUIRED in production - set via environment
+    
     # Storage
     upload_dir: str = "./storage/uploads"
     max_upload_size_mb: int = 50

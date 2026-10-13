@@ -82,16 +82,18 @@ class FileService:
         
         return safe_filename, extension
     
-    async def save_upload(self, file: UploadFile) -> Tuple[str, str, str]:
+    async def save_upload(self, file: UploadFile) -> Tuple[str, str, str, str, int]:
         """
-        Save uploaded file to storage.
+        Save uploaded file to storage and calculate SHA-256 hash.
         
         Returns:
-            Tuple of (stored_filename, storage_reference, original_filename)
+            Tuple of (stored_filename, storage_reference, original_filename, sha256_hash, file_size)
         
         Raises:
             HTTPException: If validation fails or storage error occurs
         """
+        import hashlib
+        
         original_filename = file.filename or "unknown"
         
         # Validate extension
@@ -113,12 +115,21 @@ class FileService:
         storage_path = self.upload_dir / stored_filename
         
         try:
-            # Stream file to disk
+            # Stream file to disk AND calculate SHA-256 simultaneously
+            sha256_hash = hashlib.sha256()
+            file_size = 0
+            
             with open(storage_path, "wb") as f:
                 while chunk := await file.read(8192):  # Read in 8KB chunks
                     f.write(chunk)
+                    sha256_hash.update(chunk)
+                    file_size += len(chunk)
             
-            logger.info(f"File saved: {stored_filename} (original: {original_filename})")
+            hex_digest = sha256_hash.hexdigest()
+            logger.info(
+                f"File saved: {stored_filename} (original: {original_filename}, "
+                f"size: {file_size} bytes, sha256: {hex_digest[:16]}...)"
+            )
             
             # Validate MIME type after saving
             # Note: In production, you might want to validate before saving
@@ -131,7 +142,7 @@ class FileService:
                 )
             
             # Check if file is empty
-            if storage_path.stat().st_size == 0:
+            if file_size == 0:
                 storage_path.unlink()
                 raise HTTPException(
                     status_code=400,
@@ -139,7 +150,7 @@ class FileService:
                 )
             
             storage_reference = str(storage_path.absolute())
-            return stored_filename, storage_reference, original_filename
+            return stored_filename, storage_reference, original_filename, hex_digest, file_size
             
         except HTTPException:
             raise

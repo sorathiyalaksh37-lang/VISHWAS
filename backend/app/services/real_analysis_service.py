@@ -278,11 +278,17 @@ class RealAnalysisService:
                         })
                 if hasattr(evidence, 'behavior') and evidence.behavior:
                     if evidence.behavior.urgency and evidence.behavior.urgency.detected:
+                        # Fix: UrgencyEvidence has .quotes (plural), not .quote
+                        urgency_text = (
+                            "; ".join(evidence.behavior.urgency.quotes[:2]) 
+                            if evidence.behavior.urgency.quotes 
+                            else "Urgency detected"
+                        )
                         agent_findings.append({
                             "agent": "tier1_classifier",
                             "signal": "urgency_tactic",
                             "severity": "high",
-                            "evidence_text": evidence.behavior.urgency.quote or "Urgency detected",
+                            "evidence_text": urgency_text,
                             "source": "real"
                         })
 
@@ -291,20 +297,58 @@ class RealAnalysisService:
                 )
 
             except Exception as e:
-                logger.warning(
-                    f"[{call_id}] Trust Engine assessment failed, using text-based fallback: {e}",
+                logger.error(
+                    f"[{call_id}] Trust Engine assessment FAILED: {e}",
                     exc_info=True
                 )
-                # Fallback: basic text analysis
+                # CRITICAL: Trust Judge failed - do NOT present as normal assessment
+                # Preserve any detected evidence but mark as degraded analysis
                 risk_score, risk_level, reasons, agent_findings = (
                     self._basic_text_analysis(full_text, asr_result)
                 )
+                
+                # If basic analysis found critical evidence, preserve it
+                # But add clear warning that this is degraded analysis
                 warnings.append(
-                    f"Trust Engine unavailable — using simplified text analysis. ({str(e)[:100]})"
+                    f"⚠ TRUST ENGINE FAILURE: Deterministic risk assessment unavailable. "
+                    f"Using basic text-pattern detection only. Error: {str(e)[:100]}"
                 )
-                recommended_actions.append(
-                    "Verify caller identity through independent channels"
+                warnings.append(
+                    "⚠ Assessment is DEGRADED - verification rules may not be reliable"
                 )
+                
+                # For failed Trust Judge, NEVER recommend "Normal conversation"
+                # Always require verification for any detected risk
+                if agent_findings:
+                    # Evidence detected - require verification regardless of score
+                    recommended_actions.append(
+                        "⚠ VERIFY INDEPENDENTLY: Trust Engine failed - cannot provide reliable guidance"
+                    )
+                    recommended_actions.append(
+                        "Do NOT proceed with any requests until identity is verified through a trusted channel"
+                    )
+                    # Elevate risk if critical patterns found but Judge couldn't assess properly
+                    if risk_score >= 50:
+                        risk_level = "high"
+                        risk_score = max(risk_score, 60)
+                        warnings.append(
+                            "Risk elevated due to critical patterns detected during Trust Engine failure"
+                        )
+                else:
+                    # No obvious patterns, but Judge failure means we can't be sure
+                    recommended_actions.append(
+                        "⚠ Assessment inconclusive due to Trust Engine failure"
+                    )
+                    recommended_actions.append(
+                        "Exercise heightened caution with any sensitive requests"
+                    )
+                    # Set minimum risk for unknown analysis capability
+                    if risk_score < 25:
+                        risk_score = 25
+                        risk_level = "medium"
+                        warnings.append(
+                            "Risk set to MEDIUM minimum - cannot verify safety when Trust Engine unavailable"
+                        )
 
             # Add ASR warnings
             if asr_result.transcription_status == "failed":

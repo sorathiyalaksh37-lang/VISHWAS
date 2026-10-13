@@ -32,6 +32,7 @@ def get_db() -> Session:
 def init_db():
     """Initialize database tables."""
     # Import all models so Base.metadata knows about them
+    from app.models.user import User  # noqa: F401
     from app.models.call import CallRecord, AnalysisReport, Contact  # noqa: F401
     
     logger.info("Initializing database...")

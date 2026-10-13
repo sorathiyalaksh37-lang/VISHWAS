@@ -263,12 +263,12 @@ def _generate_warnings(
     if len(transcript.segments) < 2:
         warnings.append("Very short transcript may limit detection accuracy")
     
-    # Detection warnings
-    if not claims.claims and not requests.has_sensitive_request:
-        warnings.append("No claims or requests detected - may be a normal conversation")
+    # Detection warnings - only add if truly no evidence
+    if not claims.claims and not requests.has_sensitive_request and not behavior.has_pressure_tactics:
+        warnings.append("No claims, requests, or pressure tactics detected")
     
-    # Tier 1 limitations
-    warnings.append("Tier 1 rule-based detection only (LLM Tier 2 not yet implemented)")
+    # Tier 1 limitations - removed misleading message about Tier 2
+    # (Tier 2 is configurable via settings.tier2_enabled)
     
     return warnings
 

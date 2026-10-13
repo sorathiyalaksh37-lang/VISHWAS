@@ -257,9 +257,16 @@ class TrustJudge:
         """Collect warnings about assessment limitations."""
         warnings = list(evidence.extraction_warnings)
         
-        # Voice availability
-        if not evidence.voice or evidence.voice.status != "ok":
-            warnings.append("Voice analysis unavailable or inconclusive")
+        # Voice availability - be specific about what's missing
+        if not evidence.voice:
+            warnings.append("Voice analysis not performed")
+        elif evidence.voice.status == "unavailable":
+            warnings.append("Voice analysis unavailable (model not loaded)")
+        elif evidence.voice.status == "error":
+            warnings.append("Voice analysis failed during processing")
+        elif evidence.voice.status == "inconclusive":
+            warnings.append("Voice analysis inconclusive (insufficient audio quality or duration)")
+        # Note: If status == "ok", no warning needed
         
         # Limited trust context
         if not trust_context.get("contact_found"):

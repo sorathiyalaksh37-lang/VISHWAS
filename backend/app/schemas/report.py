@@ -120,3 +120,4 @@ class AnalysisReportResponse(BaseModel):
         """Accept lowercase stored values and normalise to uppercase per v3 contract."""
         return v.upper() if isinstance(v, str) else v
 
+

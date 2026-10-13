@@ -14,6 +14,7 @@ class CallRecord(Base):
     __tablename__ = "call_records"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     original_filename = Column(String(255), nullable=False)
     stored_filename = Column(String(255), nullable=False)
     storage_reference = Column(String(500), nullable=False)
@@ -28,7 +29,7 @@ class CallRecord(Base):
     report = relationship("AnalysisReport", back_populates="call", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<CallRecord(id={self.id}, status={self.status})>"
+        return f"<CallRecord(id={self.id}, owner_id={self.owner_id}, status={self.status})>"
 
 
 class AnalysisReport(Base):
@@ -70,6 +71,7 @@ class Contact(Base):
     __tablename__ = "contacts"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     relation = Column(String(50), nullable=True)           # e.g. mother, bank
     saved_numbers = Column(Text, nullable=True)            # JSON list of phone numbers
@@ -85,4 +87,4 @@ class Contact(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     def __repr__(self):
-        return f"<Contact(id={self.id}, name={self.name}, relation={self.relation})>"
+        return f"<Contact(id={self.id}, owner_id={self.owner_id}, name={self.name}, relation={self.relation})>"
