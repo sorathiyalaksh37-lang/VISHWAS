@@ -1,0 +1,7 @@
+{"audio_path": "test_data/genuine/speaker_001_sample_01.wav", "label": "genuine", "speaker_id": "speaker_001", "duration_sec": 12.3}
+{"audio_path": "test_data/genuine/speaker_002_sample_01.wav", "label": "genuine", "speaker_id": "speaker_002", "duration_sec": 15.7}
+{"audio_path": "test_data/genuine/speaker_003_sample_01.wav", "label": "genuine", "speaker_id": "speaker_003", "duration_sec": 11.2}
+{"audio_path": "test_data/spoofed/deepfake_001.wav", "label": "spoofed", "spoof_type": "neural_vocoder", "duration_sec": 10.5}
+{"audio_path": "test_data/spoofed/deepfake_002.wav", "label": "spoofed", "spoof_type": "voice_conversion", "duration_sec": 14.1}
+{"audio_path": "test_data/spoofed/replay_001.wav", "label": "spoofed", "spoof_type": "replay_attack", "duration_sec": 9.8}
+{"audio_path": "test_data/spoofed/tts_001.wav", "label": "spoofed", "spoof_type": "text_to_speech", "duration_sec": 13.2}

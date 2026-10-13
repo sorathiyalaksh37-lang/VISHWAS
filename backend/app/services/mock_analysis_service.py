@@ -185,7 +185,7 @@ class MockAnalysisService:
             call_id: UUID of the call to analyze
         """
         # Create a new database session for the background task
-        from app.core.database import SessionLocal
+        from app.database.session import SessionLocal
         db = SessionLocal()
         
         try:

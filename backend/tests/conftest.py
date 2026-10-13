@@ -83,41 +83,50 @@ def test_upload_dir():
 @pytest.fixture(scope="function")
 def client(test_db, test_upload_dir):
     """Create a test client with test database."""
-    # Disable lifespan events for tests (init_db uses production engine)
-    app_no_lifespan = FastAPI(
-        title="VISHWAS API Test",
-        version="test"
-    )
+    # Monkey-patch SessionLocal so background tasks use test DB
+    import app.database.session
+    original_session_local = app.database.session.SessionLocal
+    app.database.session.SessionLocal = TestingSessionLocal
     
-    # Copy routes from original app
-    from app.api.routes import health, calls, analyze
-    app_no_lifespan.include_router(health.router, prefix="/api/v1", tags=["Health"])
-    app_no_lifespan.include_router(analyze.router, prefix="/api/v1", tags=["Analysis"])
-    app_no_lifespan.include_router(calls.router, prefix="/api/v1", tags=["Calls (legacy)"])
-    
-    # Add root endpoint
-    @app_no_lifespan.get("/")
-    async def root():
-        """Root endpoint for testing."""
-        from app.core.config import settings
-        return {
-            "message": "VISHWAS API",
-            "version": settings.app_version,
-            "docs": "/docs"
-        }
-    
-    def override_get_db():
-        try:
-            yield test_db
-        finally:
-            pass
-    
-    app_no_lifespan.dependency_overrides[get_db] = override_get_db
-    
-    with TestClient(app_no_lifespan) as test_client:
-        yield test_client
-    
-    app_no_lifespan.dependency_overrides.clear()
+    try:
+        # Disable lifespan events for tests (init_db uses production engine)
+        app_no_lifespan = FastAPI(
+            title="VISHWAS API Test",
+            version="test"
+        )
+        
+        # Copy routes from original app
+        from app.api.routes import health, calls, analyze
+        app_no_lifespan.include_router(health.router, prefix="/api/v1", tags=["Health"])
+        app_no_lifespan.include_router(analyze.router, prefix="/api/v1", tags=["Analysis"])
+        app_no_lifespan.include_router(calls.router, prefix="/api/v1", tags=["Calls (legacy)"])
+        
+        # Add root endpoint
+        @app_no_lifespan.get("/")
+        async def root():
+            """Root endpoint for testing."""
+            from app.core.config import settings
+            return {
+                "message": "VISHWAS API",
+                "version": settings.app_version,
+                "docs": "/docs"
+            }
+        
+        def override_get_db():
+            try:
+                yield test_db
+            finally:
+                pass
+        
+        app_no_lifespan.dependency_overrides[get_db] = override_get_db
+        
+        with TestClient(app_no_lifespan, raise_server_exceptions=True) as test_client:
+            yield test_client
+        
+        app_no_lifespan.dependency_overrides.clear()
+    finally:
+        # Restore original SessionLocal
+        app.database.session.SessionLocal = original_session_local
 
 
 @pytest.fixture

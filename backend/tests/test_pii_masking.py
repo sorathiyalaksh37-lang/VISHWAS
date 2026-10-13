@@ -145,7 +145,7 @@ class TestPIIMasker:
         segments = [
             "Call me later.",
             "Or email support@bank.com.",
-            "My account is 1234567890.",
+            "My account is 12345678901.",  # 11 digits for account number
         ]
         
         masked_segments, stats = masker.mask_segments(segments)

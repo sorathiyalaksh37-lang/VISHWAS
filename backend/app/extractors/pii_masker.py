@@ -43,15 +43,17 @@ PII_PATTERNS: Dict[str, Tuple[str, str]] = {
     ),
     
     # Phone numbers - various international formats
-    # Matches: +91-9876543210, (555) 123-4567, +1 555 123 4567, etc.
+    # Matches: +91-9876543210, (555) 123-4567, +1 555 123 4567, 9876543210 (10 digits bare)
+    # Priority: formatted phones, then 10-digit bare numbers (most common phone format)
     "phone": (
-        r"(?:\+\d{1,3}[\s\-\.]?)?(?:\(\d{2,4}\)|\d{2,4})[\s\-\.]?\d{3,4}[\s\-\.]?\d{3,4}",
+        r"(?:\+\d{1,3}[\s\-\.]\d{8,15}|\(\d{2,4}\)\s?\d{3,4}[\s\-\.]?\d{3,4}|\d{2,4}[\s\-\.]\d{3,4}[\s\-\.]\d{3,4}|\b\d{10}\b)",
         "[MASKED_PHONE]"
     ),
     
-    # Bank account numbers (10-17 digits, NO spaces/dashes, to avoid false positives)
+    # Bank account numbers (11-17 digits bare, NO spaces/dashes)
+    # 10-digit numbers are treated as phones (more common), 11+ as account numbers
     "account": (
-        r"\b\d{10,17}\b",
+        r"\b\d{11,17}\b",
         "[MASKED_ACCOUNT]"
     ),
     
