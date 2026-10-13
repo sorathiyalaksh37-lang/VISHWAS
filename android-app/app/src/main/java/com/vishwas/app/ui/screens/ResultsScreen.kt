@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.vishwas.app.viewmodel.VishwasViewModel
 
@@ -96,12 +97,49 @@ fun ResultsScreen(
                             }
                         }
                     }
-                    
+
+                    // Safety warning card for HIGH / CRITICAL results
+                    val riskLower = report.level.lowercase()
+                    if (riskLower == "high" || riskLower == "critical") {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFFFF3CD)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "⚠ Do NOT send money or share OTPs",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color(0xFF8A6D00)
+                                    )
+                                    Text(
+                                        text = "• Call back on the number saved in your contacts",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = "• Ask for the family safe word before acting",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = "• Never share a PIN, OTP, or bank password",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Risk level
                     item {
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = when (report.riskLevel) {
+                                containerColor = when (report.level.lowercase()) {
                                     "high", "critical" -> MaterialTheme.colorScheme.errorContainer
                                     "medium" -> MaterialTheme.colorScheme.tertiaryContainer
                                     else -> MaterialTheme.colorScheme.primaryContainer
@@ -113,7 +151,7 @@ fun ResultsScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "Risk Level: ${report.riskLevel.uppercase()}",
+                                    text = "Risk Level: ${report.level} (score: ${report.score}/100)",
                                     style = MaterialTheme.typography.titleLarge
                                 )
                                 Text(
@@ -208,7 +246,7 @@ fun ResultsScreen(
                                     Text(
                                         text = "Severity: ${finding.severity.uppercase()}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = when (finding.severity) {
+                                        color = when (finding.severity.lowercase()) {
                                             "critical", "high" -> MaterialTheme.colorScheme.error
                                             else -> MaterialTheme.colorScheme.onSurface
                                         }

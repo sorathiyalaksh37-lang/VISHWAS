@@ -22,7 +22,8 @@ data class UploadResponse(
 )
 
 /**
- * Call status response
+ * Call status response — v3 contract.
+ * Job-level failure is reported via `error` (nullable string), not `error_message`.
  */
 data class CallStatusResponse(
     @SerializedName("call_id") val callId: String,
@@ -30,7 +31,7 @@ data class CallStatusResponse(
     @SerializedName("created_at") val createdAt: String,
     @SerializedName("updated_at") val updatedAt: String,
     @SerializedName("completed_at") val completedAt: String?,
-    @SerializedName("error_message") val errorMessage: String?
+    @SerializedName("error") val error: String?          // v3: was error_message
 )
 
 /**
@@ -80,12 +81,11 @@ data class TranscriptResponse(
     @SerializedName("call_id") val callId: String,
     val language: String?,
     @SerializedName("transcription_status") val transcriptionStatus: String,
-    val segments: List<TranscriptSegment>,
-    @SerializedName("is_mock") val isMock: Boolean
+    val segments: List<TranscriptSegment>
 )
 
 /**
- * Agent finding
+ * Agent finding (legacy — kept for backward compat with current backend)
  */
 data class AgentFinding(
     val agent: String,
@@ -98,8 +98,61 @@ data class AgentFinding(
     val source: String
 )
 
+// ── v3 nested models ───────────────────────────────────────────────────────────
+
 /**
- * Analysis report response
+ * Per-category risk score breakdown
+ * Caps: identity 25, request 30, behavior 20, channel 15, voice 10
+ */
+data class CategoryScores(
+    @SerializedName("identity") val identity: Int? = null,
+    @SerializedName("request") val request: Int? = null,
+    @SerializedName("behavior") val behavior: Int? = null,
+    @SerializedName("channel") val channel: Int? = null,
+    @SerializedName("voice") val voice: Int? = null
+)
+
+/**
+ * Suggested verification action for the user
+ */
+data class Verification(
+    @SerializedName("action") val action: String? = null,
+    @SerializedName("target") val target: String? = null,
+    @SerializedName("safe_word_prompt") val safeWordPrompt: Boolean? = null
+)
+
+/**
+ * Speaker match result from voice layer
+ */
+data class SpeakerMatch(
+    @SerializedName("claimed_contact") val claimedContact: String? = null,
+    @SerializedName("similarity") val similarity: Double? = null,
+    @SerializedName("enrolled") val enrolled: Boolean? = null
+)
+
+/**
+ * Voice layer analysis result
+ */
+data class VoiceEvidence(
+    @SerializedName("status") val status: String? = null,       // ok | inconclusive | unavailable
+    @SerializedName("spoof_prob") val spoofProb: Double? = null,
+    @SerializedName("windows_analyzed") val windowsAnalyzed: Int? = null,
+    @SerializedName("speaker_match") val speakerMatch: SpeakerMatch? = null,
+    @SerializedName("model") val model: String? = null
+)
+
+/**
+ * Counterfactual: "what would lower the risk score?"
+ */
+data class Counterfactual(
+    @SerializedName("change") val change: String? = null,
+    @SerializedName("new_score") val newScore: Int? = null
+)
+
+/**
+ * Analysis report response — v3 contract.
+ * `level` replaces `risk_level`; `score` (Int 0-100) replaces `risk_score` (Float).
+ * Uppercase enum: LOW | MEDIUM | HIGH | CRITICAL (normalised by backend validator).
  */
 data class AnalysisReportResponse(
     @SerializedName("call_id") val callId: String,
@@ -107,15 +160,24 @@ data class AnalysisReportResponse(
     @SerializedName("analysis_mode") val analysisMode: String,
     val language: String?,
     val transcript: TranscriptResponse?,
-    @SerializedName("agent_findings") val agentFindings: List<AgentFinding>,
-    @SerializedName("risk_level") val riskLevel: String,
-    @SerializedName("risk_score") val riskScore: Float?,
-    val reasons: List<String>,
-    @SerializedName("recommended_actions") val recommendedActions: List<String>,
-    val warnings: List<String>,
+
+    // ── v3 primary fields ──────────────────────────────────────────────────────
+    @SerializedName("level") val level: String,                             // HIGH | CRITICAL | MEDIUM | LOW
+    @SerializedName("score") val score: Int,                                // 0-100
+    @SerializedName("category_scores") val categoryScores: CategoryScores? = null,
+    @SerializedName("fired_rules") val firedRules: List<String> = emptyList(),
+    @SerializedName("killchain_stage") val killchainStage: String? = null,
+    @SerializedName("verification") val verification: Verification? = null,
+    @SerializedName("voice") val voice: VoiceEvidence? = null,
+    @SerializedName("counterfactuals") val counterfactuals: List<Counterfactual> = emptyList(),
+
+    // ── legacy / backward-compat fields ────────────────────────────────────────
+    @SerializedName("agent_findings") val agentFindings: List<AgentFinding> = emptyList(),
+    @SerializedName("reasons") val reasons: List<String> = emptyList(),
+    @SerializedName("recommended_actions") val recommendedActions: List<String> = emptyList(),
+    @SerializedName("warnings") val warnings: List<String> = emptyList(),
     @SerializedName("created_at") val createdAt: String,
-    @SerializedName("completed_at") val completedAt: String?,
-    @SerializedName("is_mock") val isMock: Boolean
+    @SerializedName("completed_at") val completedAt: String?
 )
 
 /**

@@ -28,7 +28,7 @@ class CallStatusResponse(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     completed_at: Optional[datetime] = Field(None, description="Completion timestamp")
-    error_message: Optional[str] = Field(None, description="Error message if failed")
+    error: Optional[str] = Field(None, description="Error message if analysis failed (nullable string)")
 
 
 class CallListItem(BaseModel):

@@ -135,7 +135,7 @@ async def get_call_status(call_id: str, db: Session = Depends(get_db)):
         created_at=call.created_at,
         updated_at=call.updated_at,
         completed_at=call.completed_at,
-        error_message=call.error_message
+        error=call.error_message
     )
 
 
@@ -246,14 +246,13 @@ async def get_report(call_id: str, db: Session = Depends(get_db)):
             language=transcript_data.get("language") if transcript_data else None,
             transcript=transcript,
             agent_findings=agent_findings,
-            risk_level=report.risk_level,
-            risk_score=report.risk_score,
+            level=report.risk_level,
+            score=int(report.risk_score) if report.risk_score is not None else 0,
             reasons=reasons_data,
             recommended_actions=recommended_actions_data,
             warnings=warnings_data,
             created_at=call.created_at,
             completed_at=call.completed_at,
-            is_mock=report.analysis_mode == "mock"
         )
         
     except Exception as e:

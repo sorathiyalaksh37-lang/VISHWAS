@@ -67,8 +67,8 @@ def test_full_workflow(client, sample_audio_file):
     assert report["call_id"] == call_id
     assert report["status"] == "completed"
     assert report["analysis_mode"] == "mock"
-    assert report["is_mock"] is True
-    assert "risk_level" in report
+    assert "level" in report
+    assert "score" in report
     assert "reasons" in report
     assert "recommended_actions" in report
     assert len(report["warnings"]) > 0

@@ -111,11 +111,11 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
     /**
      * Poll call status until complete or failed
      */
-    private fun pollCallStatus(callId: String, maxAttempts: Int = 30) {
+    private fun pollCallStatus(callId: String, maxAttempts: Int = 60) {
         viewModelScope.launch {
             var attempts = 0
             while (attempts < maxAttempts) {
-                delay(1000) // Poll every second
+                delay(3000) // Poll every 3 seconds (180 s total window)
                 attempts++
                 
                 repository.getCallStatus(callId).fold(
@@ -137,7 +137,7 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
                             }
                             ProcessingStatus.FAILED -> {
                                 _uiState.value = _uiState.value.copy(
-                                    errorMessage = "Analysis failed: ${status.errorMessage}"
+                                    errorMessage = "Analysis failed: ${status.error}"
                                 )
                                 return@launch
                             }
@@ -155,7 +155,8 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
             
             // Timeout
             _uiState.value = _uiState.value.copy(
-                errorMessage = "Analysis timeout. Check history for results."
+                errorMessage = "Analysis is taking longer than expected (3 min). " +
+                               "It will complete in the background — check History to see results."
             )
         }
     }
