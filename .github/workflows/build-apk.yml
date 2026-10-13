@@ -1,9 +1,9 @@
-name: Build Android APK
+﻿name: Build Android APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, android/m1-v3]
     paths: ["android-app/**"]
 
 jobs:
