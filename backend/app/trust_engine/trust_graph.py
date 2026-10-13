@@ -104,9 +104,9 @@ class TrustGraph:
             return contact
     
     def get_contact_by_name(self, name: str) -> Optional[Contact]:
-        """Retrieve contact by name."""
+        """Retrieve contact by name (case-insensitive)."""
         return self.db.query(Contact).filter(
-            Contact.name == name
+            Contact.name.ilike(name)  # Case-insensitive match
         ).first()
     
     def get_contact_by_relation(self, relation: str) -> Optional[Contact]:
