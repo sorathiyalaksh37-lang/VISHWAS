@@ -33,14 +33,16 @@ async def lifespan(app: FastAPI):
     
     # Health checks for real mode
     if settings.analysis_mode == "real":
-        from app.audio.preprocessor import FFMPEG_AVAILABLE
-        if not FFMPEG_AVAILABLE:
+        from app.audio.preprocessor import FFMPEG_AVAILABLE, AV_AVAILABLE
+        if not FFMPEG_AVAILABLE and not AV_AVAILABLE:
             logger.error(
-                "⚠️  CRITICAL: ffmpeg not found on PATH. "
-                "Audio conversion will fail. Install ffmpeg to use real analysis mode."
+                "⚠️  CRITICAL: No audio converter available. "
+                "Audio conversion will fail. Install ffmpeg or PyAV (pip install av)"
             )
-        else:
+        elif FFMPEG_AVAILABLE:
             logger.info("✓ ffmpeg available for audio conversion")
+        elif AV_AVAILABLE:
+            logger.info("✓ PyAV available for audio conversion")
         
         # Check if faster-whisper can be imported
         try:

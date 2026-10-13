@@ -158,21 +158,16 @@ class RealAnalysisService:
             try:
                 if settings.enable_voice_layer:
                     from app.audio.voice_layer import get_voice_layer
+                    from dataclasses import asdict
                     voice_layer = get_voice_layer()
                     voice_result = voice_layer.analyze(wav_path)
 
                     if voice_result:
-                        voice_dict = {
-                            "status": voice_result.get("status", "unavailable"),
-                            "spoof_prob": voice_result.get("spoof_prob"),
-                            "windows_analyzed": voice_result.get("windows_analyzed"),
-                            "speaker_match": voice_result.get("speaker_match"),
-                            "quality": voice_result.get("quality"),
-                            "model": voice_result.get("model"),
-                        }
+                        # Convert dataclass to dict
+                        voice_dict = asdict(voice_result)
                         logger.info(
-                            f"[{call_id}] Voice layer: status={voice_result.get('status')}, "
-                            f"spoof_prob={voice_result.get('spoof_prob')}"
+                            f"[{call_id}] Voice layer: status={voice_result.status}, "
+                            f"spoof_prob={voice_result.spoof_prob}"
                         )
                     else:
                         voice_dict = {"status": "unavailable"}

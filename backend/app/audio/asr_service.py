@@ -22,6 +22,25 @@ try:
     from faster_whisper import WhisperModel  # type: ignore
     FASTER_WHISPER_AVAILABLE = True
     logger.info("faster-whisper is available ✓")
+    
+    # Monkey-patch PyAV to fix metadata_errors compatibility issue with PyAV 19.x
+    # faster-whisper internally uses av.open() with metadata_errors parameter
+    # which was added after PyAV 11.0 but the signature changed in 19.x
+    try:
+        import av
+        _original_av_open = av.open
+        def _patched_av_open(file, *args, metadata_errors="ignore", **kwargs):
+            # Remove metadata_errors if it causes issues
+            try:
+                return _original_av_open(file, *args, metadata_errors=metadata_errors, **kwargs)
+            except TypeError:
+                # If metadata_errors is not supported, try without it
+                return _original_av_open(file, *args, **kwargs)
+        av.open = _patched_av_open
+        logger.info("Applied PyAV compatibility patch for metadata_errors")
+    except Exception as e:
+        logger.warning(f"Could not patch PyAV: {e}")
+        
 except ImportError:
     FASTER_WHISPER_AVAILABLE = False
     logger.warning(
