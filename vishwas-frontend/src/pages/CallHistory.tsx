@@ -10,7 +10,12 @@ type FilterOption = 'all' | 'completed' | 'failed'
  * Displays a list of all analysed call recordings from the backend.
  * Includes filters for status and risk level.
  */
-export function CallHistory() {
+
+interface CallHistoryProps {
+  onViewReport?: (callId: string) => void
+}
+
+export function CallHistory({ onViewReport }: CallHistoryProps) {
   const [records, setRecords] = useState<CallListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -202,8 +207,11 @@ export function CallHistory() {
                     {formatDate(record.created_at)}
                   </td>
                   <td>
-                    {record.status === 'completed' && (
-                      <button className="btn-ghost btn-ghost--xs">
+                    {record.status === 'completed' && onViewReport && (
+                      <button
+                        className="btn-ghost btn-ghost--xs"
+                        onClick={() => onViewReport(record.call_id)}
+                      >
                         View Report
                       </button>
                     )}

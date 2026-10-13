@@ -227,17 +227,68 @@ class MockAnalysisService:
                 "Do not rely on this analysis for actual fraud prevention"
             ]
             
+            # Build v3 fields for mock
+            if scenario["risk_level"] in ("high", "critical"):
+                mock_risk_score = 72 if scenario["risk_level"] == "high" else 85
+                mock_category_scores = {
+                    "identity": 15,
+                    "request": 25,
+                    "behavior": 15,
+                    "channel": 10,
+                    "voice": 0,
+                }
+                mock_fired_rules = [
+                    "IDENTITY_UNKNOWN", "REQ_OTP_PIN", "BEHAVIOR_URGENCY_HIGH",
+                    "CHANNEL_UNKNOWN"
+                ]
+                mock_verification = {
+                    "action": "Do not share sensitive information",
+                    "target": "Verify the caller's identity through a known contact method",
+                    "safe_word_prompt": None,
+                }
+                mock_killchain = "REQUEST"
+            else:
+                mock_risk_score = 8
+                mock_category_scores = {
+                    "identity": 0,
+                    "request": 0,
+                    "behavior": 0,
+                    "channel": 0,
+                    "voice": 0,
+                }
+                mock_fired_rules = []
+                mock_verification = {
+                    "action": "Normal conversation",
+                    "target": "Exercise standard caution with sensitive information",
+                    "safe_word_prompt": None,
+                }
+                mock_killchain = "RECONNAISSANCE"
+
+            mock_voice = {
+                "status": "unavailable",
+                "spoof_prob": None,
+                "windows_analyzed": None,
+                "speaker_match": None,
+                "quality": None,
+                "model": None,
+            }
+
             # Create analysis report
             report = AnalysisReport(
                 call_id=call_id,
                 transcript_json=json.dumps(transcript_data),
                 agent_findings_json=json.dumps(scenario["agent_findings"]),
                 risk_level=scenario["risk_level"],
-                risk_score=scenario.get("risk_score"),
+                risk_score=mock_risk_score,
                 reasons_json=json.dumps(scenario["reasons"]),
                 recommended_actions_json=json.dumps(scenario["recommended_actions"]),
                 warnings_json=json.dumps(warnings),
-                analysis_mode=self.analysis_mode
+                analysis_mode=self.analysis_mode,
+                category_scores_json=json.dumps(mock_category_scores),
+                fired_rules_json=json.dumps(mock_fired_rules),
+                verification_json=json.dumps(mock_verification),
+                killchain_stage=mock_killchain,
+                voice_json=json.dumps(mock_voice),
             )
             
             # Check if report already exists (shouldn't happen, but be safe)

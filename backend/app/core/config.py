@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     allowed_extensions: str = "wav,mp3,m4a"
     
     # CORS
-    cors_origins: str = "http://localhost:8501,http://localhost:3000"
+    cors_origins: str = "http://localhost:8501,http://localhost:3000,http://localhost:5173"
     
     # Analysis
     analysis_mode: str = "mock"           # "real" | "mock"
