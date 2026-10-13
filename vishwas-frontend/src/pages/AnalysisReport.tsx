@@ -10,6 +10,14 @@ import {
 } from 'lucide-react'
 import { apiClient, type AnalysisReportResponse } from '../services/api'
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+
+interface TrustImpactResult {
+  updated: { contact_id: string; name: string; old_trust: string; new_trust: string }[]
+  message: string
+  risk_level: string
+}
+
 // ── Helper: animated circular score gauge ─────────────────────────────────────
 
 function ScoreGauge({ score, level }: { score: number; level: string }) {
@@ -314,14 +322,32 @@ export function AnalysisReport({ callId, recordingName, onBack }: AnalysisReport
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'transcript'>('overview')
+  const [trustImpact, setTrustImpact] = useState<TrustImpactResult | null>(null)
+  const [showTrustBanner, setShowTrustBanner] = useState(true)
 
   useEffect(() => {
     if (!callId) return
     setLoading(true)
     setError(null)
-    apiClient.getReport(callId).then(data => {
-      if (data) setReport(data)
-      else setError('Failed to load report. The backend may be unavailable.')
+    setTrustImpact(null)
+    setShowTrustBanner(true)
+    apiClient.getReport(callId).then(async data => {
+      if (data) {
+        setReport(data)
+        // Auto-apply trust impact for HIGH or CRITICAL calls
+        const lvl = (data.level || '').toUpperCase()
+        if (lvl === 'HIGH' || lvl === 'CRITICAL') {
+          try {
+            const res = await fetch(`${API_BASE}/calls/${callId}/apply-trust-impact`, { method: 'POST' })
+            if (res.ok) {
+              const impact: TrustImpactResult = await res.json()
+              if (impact.updated.length > 0) setTrustImpact(impact)
+            }
+          } catch { /* silently ignore trust impact errors */ }
+        }
+      } else {
+        setError('Failed to load report. The backend may be unavailable.')
+      }
       setLoading(false)
     })
   }, [callId])
@@ -419,6 +445,45 @@ export function AnalysisReport({ callId, recordingName, onBack }: AnalysisReport
           }}>
             ANALYSIS MODE: {report.analysis_mode.toUpperCase()}
           </span>
+        </div>
+      )}
+
+      {/* ── TRUST IMPACT BANNER ──────────────────────────────────── */}
+      {trustImpact && showTrustBanner && (
+        <div style={{
+          background: level === 'CRITICAL' ? 'rgba(239,68,68,0.08)' : 'rgba(249,115,22,0.08)',
+          border: `1px solid ${level === 'CRITICAL' ? 'rgba(239,68,68,0.4)' : 'rgba(249,115,22,0.4)'}`,
+          borderRadius: 10, padding: '0.875rem 1rem',
+          display: 'flex', gap: 10, alignItems: 'flex-start',
+        }}>
+          <AlertOctagonIcon size={18} style={{ color: level === 'CRITICAL' ? '#ef4444' : '#f97316', flexShrink: 0, marginTop: 2 }} />
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: level === 'CRITICAL' ? '#ef4444' : '#f97316', marginBottom: 6 }}>
+              🚨 Trust Graph Auto-Updated — {trustImpact.updated.length} Contact{trustImpact.updated.length > 1 ? 's' : ''} Demoted
+            </p>
+            <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+              Due to this {level} risk call, the following contacts have had their trust level automatically lowered.
+              Review in the <strong style={{ color: 'var(--color-text)' }}>Trust Graph</strong> tab.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {trustImpact.updated.map(c => (
+                <span key={c.contact_id} style={{
+                  fontSize: '0.72rem', fontWeight: 600, padding: '2px 10px',
+                  borderRadius: 99, background: 'rgba(239,68,68,0.12)',
+                  color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)',
+                }}>
+                  {c.name}: {c.old_trust.toUpperCase()} → {c.new_trust.toUpperCase()}
+                </span>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={() => setShowTrustBanner(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4, flexShrink: 0 }}
+            aria-label="Dismiss"
+          >
+            <XCircleIcon size={16} />
+          </button>
         </div>
       )}
 

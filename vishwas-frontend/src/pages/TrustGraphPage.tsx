@@ -15,6 +15,9 @@ interface Contact {
   saved_numbers: string[]
   voiceprint_enrolled: boolean
   voiceprint_enrolled_at: string | null
+  trust_level: 'high' | 'medium' | 'low'
+  trust_flagged_at: string | null
+  trust_flagged_by_call_id: string | null
 }
 
 interface GraphNode {
@@ -22,6 +25,7 @@ interface GraphNode {
   label: string
   relation: string
   enrolled: boolean
+  trust_level: string
   x: number
   y: number
   vx: number
@@ -43,6 +47,14 @@ function relationIcon(rel: string | null) {
   return UserIcon
 }
 
+function trustColor(trust: string | undefined): string {
+  switch ((trust || 'high').toLowerCase()) {
+    case 'low':    return '#ef4444'  // red — flagged
+    case 'medium': return '#f59e0b'  // orange — suspicious
+    default:       return '#10b981'  // green — trusted
+  }
+}
+
 function relationColor(rel: string | null): string {
   const r = (rel || '').toLowerCase()
   if (['bank', 'institution'].some(k => r.includes(k))) return '#06b6d4'
@@ -62,6 +74,7 @@ function layoutNodes(contacts: Contact[], width: number, height: number): GraphN
       label: c.name,
       relation: c.relation || 'Contact',
       enrolled: c.voiceprint_enrolled,
+      trust_level: c.trust_level || 'high',
       x: cx + radius * Math.cos(angle),
       y: cy + radius * Math.sin(angle),
       vx: 0, vy: 0,
@@ -98,14 +111,19 @@ function TrustGraphCanvas({
 
     // Draw edges
     nodesRef.current.forEach(n => {
+      const tc = trustColor(n.trust_level)
       ctx.beginPath()
       ctx.moveTo(cx, cy)
       ctx.lineTo(n.x, n.y)
-      ctx.strokeStyle = n.enrolled
-        ? 'rgba(16, 185, 129, 0.25)'
-        : 'rgba(156, 163, 175, 0.15)'
-      ctx.lineWidth = n.enrolled ? 1.5 : 1
-      ctx.setLineDash(n.enrolled ? [] : [4, 4])
+      ctx.strokeStyle = n.trust_level === 'low'
+        ? 'rgba(239,68,68,0.3)'
+        : n.trust_level === 'medium'
+        ? 'rgba(245,158,11,0.2)'
+        : n.enrolled
+        ? 'rgba(16,185,129,0.25)'
+        : 'rgba(156,163,175,0.15)'
+      ctx.lineWidth = n.trust_level === 'low' ? 2 : n.enrolled ? 1.5 : 1
+      ctx.setLineDash(n.trust_level === 'low' ? [6, 3] : n.enrolled ? [] : [4, 4])
       ctx.stroke()
       ctx.setLineDash([])
     })
@@ -127,7 +145,7 @@ function TrustGraphCanvas({
     // Draw contact nodes
     nodesRef.current.forEach(n => {
       const isSelected = n.id === selected
-      const color = n.enrolled ? '#10b981' : '#6b7280'
+      const color = trustColor(n.trust_level)
       const r = isSelected ? 20 : 16
 
       // Glow for selected
@@ -159,11 +177,36 @@ function TrustGraphCanvas({
       ctx.font = `${isSelected ? '600' : '400'} 10px Inter, sans-serif`
       ctx.fillText(n.label.split(' ')[0], n.x, n.y + r + 11)
 
-      // Enrollment dot
-      if (n.enrolled) {
+      // Status dot (top-right corner of node)
+      if (n.trust_level === 'low') {
+        // Red warning dot for flagged contacts
+        ctx.beginPath()
+        ctx.arc(n.x + r - 3, n.y - r + 3, 5, 0, Math.PI * 2)
+        ctx.fillStyle = '#ef4444'
+        ctx.fill()
+        ctx.strokeStyle = '#111827'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+        // Exclamation mark
+        ctx.fillStyle = '#fff'
+        ctx.font = 'bold 7px Inter, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('!', n.x + r - 3, n.y - r + 3)
+      } else if (n.enrolled) {
+        // Green check dot for enrolled contacts
         ctx.beginPath()
         ctx.arc(n.x + r - 3, n.y - r + 3, 4, 0, Math.PI * 2)
         ctx.fillStyle = '#10b981'
+        ctx.fill()
+        ctx.strokeStyle = '#111827'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+      } else if (n.trust_level === 'medium') {
+        // Orange warning dot for suspicious
+        ctx.beginPath()
+        ctx.arc(n.x + r - 3, n.y - r + 3, 4, 0, Math.PI * 2)
+        ctx.fillStyle = '#f59e0b'
         ctx.fill()
         ctx.strokeStyle = '#111827'
         ctx.lineWidth = 1.5
@@ -457,6 +500,8 @@ export function TrustGraphPage() {
   )
 
   const enrolledCount = contacts.filter(c => c.voiceprint_enrolled).length
+  const flaggedCount = contacts.filter(c => c.trust_level === 'low').length
+  const suspiciousCount = contacts.filter(c => c.trust_level === 'medium').length
 
   return (
     <div className="page-content">
@@ -482,7 +527,7 @@ export function TrustGraphPage() {
       </div>
 
       {/* Stats row */}
-      <div className="summary-cards" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+      <div className="summary-cards" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         <div className="summary-card">
           <div className="summary-card__label">Total Contacts</div>
           <div className="summary-card__value">{contacts.length}</div>
@@ -492,8 +537,12 @@ export function TrustGraphPage() {
           <div className="summary-card__value" style={{ color: 'var(--color-accent)' }}>{enrolledCount}</div>
         </div>
         <div className="summary-card">
-          <div className="summary-card__label">Pending Enrollment</div>
-          <div className="summary-card__value" style={{ color: 'var(--color-warn)' }}>{contacts.length - enrolledCount}</div>
+          <div className="summary-card__label">Suspicious</div>
+          <div className="summary-card__value" style={{ color: '#f59e0b' }}>{suspiciousCount}</div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-card__label">🚨 Flagged (Low Trust)</div>
+          <div className="summary-card__value" style={{ color: flaggedCount > 0 ? 'var(--color-critical)' : 'var(--color-text-muted)' }}>{flaggedCount}</div>
         </div>
       </div>
 
@@ -545,11 +594,15 @@ export function TrustGraphPage() {
             }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-                Enrolled
+                High Trust
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6b7280', display: 'inline-block' }} />
-                Not enrolled
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+                Suspicious
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+                Flagged
               </span>
             </div>
           )}
@@ -594,6 +647,29 @@ export function TrustGraphPage() {
                 }}>
                   {selectedContact.voiceprint_enrolled ? '✓ Voice enrolled' : 'No voiceprint'}
                 </span>
+              </div>
+
+              {/* Trust level display */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '0.5rem 0.75rem', borderRadius: 8, marginBottom: 10,
+                background: selectedContact.trust_level === 'low'
+                  ? 'rgba(239,68,68,0.08)'
+                  : selectedContact.trust_level === 'medium'
+                  ? 'rgba(245,158,11,0.08)'
+                  : 'rgba(16,185,129,0.06)',
+                border: `1px solid ${trustColor(selectedContact.trust_level)}33`,
+              }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: trustColor(selectedContact.trust_level) }}>
+                  {selectedContact.trust_level === 'low' ? '🔴 FLAGGED — LOW TRUST'
+                    : selectedContact.trust_level === 'medium' ? '🟡 SUSPICIOUS — MEDIUM TRUST'
+                    : '🟢 TRUSTED — HIGH TRUST'}
+                </span>
+                {selectedContact.trust_flagged_at && (
+                  <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>
+                    Flagged {new Date(selectedContact.trust_flagged_at).toLocaleDateString()}
+                  </span>
+                )}
               </div>
 
               {selectedContact.saved_numbers.length > 0 && (
@@ -650,23 +726,28 @@ export function TrustGraphPage() {
             ) : (
               filtered.map(c => {
                 const Icon = relationIcon(c.relation)
+                const tc = trustColor(c.trust_level)
                 return (
                   <div
                     key={c.contact_id}
                     className={`contact-list-item${selected === c.contact_id ? ' contact-list-item--selected' : ''}`}
                     onClick={() => setSelected(c.contact_id === selected ? null : c.contact_id)}
+                    style={{ borderLeft: `3px solid ${tc}` }}
                   >
-                    <div className="contact-list-icon" style={{ color: relationColor(c.relation) }}>
+                    <div className="contact-list-icon" style={{ color: tc }}>
                       <Icon size={14} />
                     </div>
                     <div className="contact-list-info">
                       <span className="contact-list-name">{c.name}</span>
                       <span className="contact-list-meta">{c.relation || 'Contact'}</span>
                     </div>
-                    {c.voiceprint_enrolled
-                      ? <ShieldCheckIcon size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-                      : <HelpCircleIcon size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                    }
+                    <span style={{
+                      fontSize: '0.6rem', fontWeight: 700, padding: '1px 6px', borderRadius: 99,
+                      background: `${tc}15`, color: tc, border: `1px solid ${tc}33`,
+                      letterSpacing: '0.06em', flexShrink: 0,
+                    }}>
+                      {(c.trust_level || 'high').toUpperCase()}
+                    </span>
                   </div>
                 )
               })

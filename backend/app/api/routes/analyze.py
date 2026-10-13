@@ -532,7 +532,7 @@ async def list_contacts(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """List all enrolled contacts. **Authentication required - returns only user's own contacts.**"""
+    """List all enrolled contacts including trust level. **Authentication required - returns only user's own contacts.**"""
     contacts = db.query(Contact).filter(Contact.owner_id == current_user.id).all()
     return [
         {
@@ -544,9 +544,92 @@ async def list_contacts(
             "voiceprint_enrolled_at": (
                 c.voiceprint_enrolled_at.isoformat() if c.voiceprint_enrolled_at else None
             ),
+            "trust_level": getattr(c, 'trust_level', 'high') or 'high',
+            "trust_flagged_at": (
+                c.trust_flagged_at.isoformat() if getattr(c, 'trust_flagged_at', None) else None
+            ),
+            "trust_flagged_by_call_id": getattr(c, 'trust_flagged_by_call_id', None),
         }
         for c in contacts
     ]
+# ── PATCH /contacts/{id}/trust ────────────────────────────────────────────────
+
+@router.patch("/contacts/{contact_id}/trust")
+async def update_contact_trust(
+    contact_id: str,
+    trust_level: str = Query(..., description="Trust level: high, medium, or low"),
+    flagged_by_call_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Manually update a contact's trust level."""
+    if trust_level not in ('high', 'medium', 'low'):
+        raise HTTPException(status_code=400, detail="trust_level must be 'high', 'medium', or 'low'")
+    contact = db.query(Contact).filter(Contact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    contact.trust_level = trust_level
+    if flagged_by_call_id:
+        contact.trust_flagged_by_call_id = flagged_by_call_id
+        contact.trust_flagged_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(contact)
+    return {
+        "contact_id": contact.id,
+        "name": contact.name,
+        "trust_level": contact.trust_level,
+        "trust_flagged_by_call_id": contact.trust_flagged_by_call_id,
+        "trust_flagged_at": contact.trust_flagged_at.isoformat() if contact.trust_flagged_at else None,
+    }
+
+
+# ── POST /calls/{id}/apply-trust-impact ──────────────────────────────────────
+
+@router.post("/calls/{call_id}/apply-trust-impact")
+async def apply_trust_impact(
+    call_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    After a HIGH or CRITICAL analysis, automatically downgrade trust level
+    of all contacts. Only demotes — never promotes.
+    CRITICAL → low, HIGH → medium.
+    """
+    call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
+    if not call:
+        raise HTTPException(status_code=404, detail="Call not found")
+    report = db.query(AnalysisReport).filter(AnalysisReport.call_id == call_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    risk_level = (report.risk_level or '').upper()
+    if risk_level not in ('HIGH', 'CRITICAL'):
+        return {"message": f"Risk level {risk_level} does not trigger trust demotion", "updated": []}
+
+    new_trust = 'low' if risk_level == 'CRITICAL' else 'medium'
+    trust_order = {'high': 3, 'medium': 2, 'low': 1}
+    contacts = db.query(Contact).all()
+    updated = []
+    now = datetime.now(timezone.utc)
+
+    for c in contacts:
+        current = getattr(c, 'trust_level', 'high') or 'high'
+        if trust_order.get(new_trust, 1) < trust_order.get(current, 3):
+            c.trust_level = new_trust
+            c.trust_flagged_by_call_id = call_id
+            c.trust_flagged_at = now
+            updated.append({"contact_id": c.id, "name": c.name, "old_trust": current, "new_trust": new_trust})
+
+    if updated:
+        db.commit()
+        logger.info(f"Trust impact: {len(updated)} contacts → '{new_trust}' for call {call_id} ({risk_level})")
+
+    return {
+        "call_id": call_id,
+        "risk_level": risk_level,
+        "new_trust_level": new_trust,
+        "updated": updated,
+        "message": f"{len(updated)} contact(s) downgraded to '{new_trust}' due to {risk_level} call",
+    }
 
 
 # ── Internal helper ───────────────────────────────────────────────────────────

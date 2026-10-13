@@ -1,7 +1,7 @@
 """
 Database models for call recordings and analysis.
 """
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Float, Integer, LargeBinary
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Float, Integer, LargeBinary, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database.base import Base
@@ -83,6 +83,10 @@ class Contact(Base):
     voiceprint_embedding = Column(LargeBinary, nullable=True)
     voiceprint_model = Column(String(100), nullable=True)
     voiceprint_enrolled_at = Column(DateTime(timezone=True), nullable=True)
+    # Trust level: 'high' (trusted), 'medium' (suspicious), 'low' (flagged/compromised)
+    trust_level = Column(String(20), nullable=False, default='high')
+    trust_flagged_by_call_id = Column(String(36), nullable=True)  # which analysis caused demotion
+    trust_flagged_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
