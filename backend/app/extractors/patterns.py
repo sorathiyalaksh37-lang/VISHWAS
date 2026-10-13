@@ -58,7 +58,8 @@ class DetectionPatterns:
         "authority": [
             (r"\b(i am|i'?m|this is)\s+(a\s+)?(police|officer|inspector|constable|cop)\b", "AUTH_POLICE_1", 0.9),
             (r"\b(police|inspector|officer)\s+(se|from|bol|baat)\s+(kar|calling|speaking)\s+(raha|rahi|rahe)\b", "AUTH_POLICE_HI_1", 0.9),
-            (r"\b(i am|i'?m|this is)\s+(from|se)\s+(police|thana|station|cyber cell)\b", "AUTH_POLICE_2", 0.9),
+            (r"\b(i am|i'?m|this is)\s+(from|se)\s+(the\s+)?(police|thana|station|cyber cell)\b", "AUTH_POLICE_2", 0.9),
+            (r"\b(inspector|officer|constable)\s+\w+\s+from\s+(the\s+)?(police|station)\b", "AUTH_POLICE_3", 0.9),
             (r"\b(i am|i'?m|this is)\s+(a\s+)?(lawyer|advocate|attorney|legal)\b", "AUTH_LEGAL_1", 0.85),
         ],
     }
@@ -71,14 +72,15 @@ class DetectionPatterns:
         "otp": [
             # Requests to share/tell OTP
             (r"\b(tell|bata|share|bhej|send|give|do|provide|enter)\s+(me\s+)?(your|apna|tumhara|aapka)?\s*(otp|one time password|verification code|code)\b", "CRED_OTP_REQ_1", 0.95),
-            (r"\b(otp|verification code|code)\s+(bata|tell|share|bhej|send|give|do|provide)\b", "CRED_OTP_REQ_2", 0.95),
+            (r"\b(otp|verification code|code)\s+(bata|tell|share|bhej|send|give|do|provide|bataiye)\b", "CRED_OTP_REQ_2", 0.95),
             (r"\b(what|kya|konsa)\s+(is|hai)\s+(your|tumhara|aapka)\s+(otp|verification code|code)\b", "CRED_OTP_REQ_3", 0.95),
             (r"\b(otp|code)\s+(kya|what)\s+(hai|is|aya|aaya|received)\b", "CRED_OTP_REQ_HI_1", 0.95),
             (r"\b(please\s+)?(read|padho|batao|bolo)\s+(the\s+)?(otp|code|verification)\b", "CRED_OTP_REQ_4", 0.95),
+            (r"\b(apna|aapka|your)\s+(otp|code)\s+(bataiye|bata|tell)\b", "CRED_OTP_REQ_5", 0.95),
             
             # Contextual OTP requests
-            (r"\b(need|chahiye|zarurat)\s+(your|tumhara|aapka)\s+(otp|code|verification)\b", "CRED_OTP_REQ_5", 0.9),
-            (r"\b(verify|confirm|check)\s+(your|tumhara)\s+(otp|code)\b", "CRED_OTP_REQ_6", 0.85),
+            (r"\b(need|chahiye|zarurat)\s+(your|tumhara|aapka)\s+(otp|code|verification)\b", "CRED_OTP_REQ_6", 0.9),
+            (r"\b(verify|confirm|check)\s+(your|tumhara)\s+(otp|code)\b", "CRED_OTP_REQ_7", 0.85),
         ],
         
         "pin": [
@@ -92,7 +94,8 @@ class DetectionPatterns:
             # Password requests
             (r"\b(tell|bata|share|give|provide)\s+(me\s+)?(your|apna|tumhara|aapka)?\s*(account\s+|login\s+)?(password|paasword)\b", "CRED_PASS_REQ_1", 0.95),
             (r"\b(password|paasword)\s+(bata|tell|share|kya|what)\b", "CRED_PASS_REQ_2", 0.95),
-            (r"\b(what|kya)\s+(is|hai)\s+(your|tumhara|aapka)\s+(password|paasword)\b", "CRED_PASS_REQ_3", 0.95),
+            (r"\b(what|kya)\s+(is|hai)\s+(your|tumhara|aapka)\s+(account\s+)?(password|paasword)\b", "CRED_PASS_REQ_3", 0.95),
+            (r"\b(your|tumhara|aapka)\s+(account\s+)?(password|paasword)\s+(for|to)\b", "CRED_PASS_REQ_4", 0.95),
         ],
         
         "cvv": [
@@ -146,7 +149,8 @@ class DetectionPatterns:
         # Threats
         (r"\b(account|khata)\s+(will be|ho jayega|hoga)?\s*(blocked|block|band|lock|freeze)\b", "URGENCY_THREAT_1", 0.85),
         (r"\b(account|card|service)\s+(deactivate|suspend|cancel|block)\b", "URGENCY_THREAT_2", 0.85),
-        (r"\b(legal action|arrest|police|case|complaint|fir)\s+(against|ke khilaf|hoga)\b", "URGENCY_THREAT_3", 0.9),
+        (r"\b(legal action|arrest|police|case|complaint|fir)\s+(will be taken|against|ke khilaf|hoga|taken)\b", "URGENCY_THREAT_3", 0.9),
+        (r"\b(legal|kanuni)\s+(action|case)\b", "URGENCY_THREAT_4", 0.85),
         
         # Emergency language
         (r"\b(emergency|zaruri|important|serious|critical|problem|issue|musibat)\b", "URGENCY_EMERG_1", 0.7),
@@ -161,6 +165,8 @@ class DetectionPatterns:
         # Don't tell anyone
         (r"\b(don'?t|mat|nahi)\s+(tell|bata|batana|share|bol|bolna)\s+(anyone|kisi|kisi ko|anybody)\b", "SECRECY_DONT_TELL_1", 0.9),
         (r"\b(kisi ko|anyone)\s+(mat|nahi|don'?t)\s+(bata|tell|bol)\b", "SECRECY_DONT_TELL_2", 0.9),
+        (r"\b(mat|nahi)\s+(batana|bata|bol|bolna)\s+(kisi ko|anyone)\b", "SECRECY_DONT_TELL_3", 0.9),
+        (r"\b(mat batana|dont tell|don't tell)\b", "SECRECY_DONT_TELL_4", 0.9),
         
         # Secret/Confidential
         (r"\b(keep|rakh|rakho)\s+(it\s+)?(secret|confidential|gupth|chhupakar)\b", "SECRECY_SECRET_1", 0.85),

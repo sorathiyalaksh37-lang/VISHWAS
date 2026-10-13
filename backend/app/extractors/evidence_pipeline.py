@@ -175,6 +175,9 @@ def _create_empty_evidence(
         EmotionalPressureEvidence,
     )
     
+    if warnings is None:
+        warnings = ["Empty or invalid transcript"]
+    
     return EvidenceExtraction(
         call_id=call_id,
         claims=ClaimsEvidence(claims=[], primary_claim=None, claim_changes=0),
@@ -208,7 +211,7 @@ def _create_empty_evidence(
         tier1_signals=[],
         tier2_used=False,
         fallback_used=False,
-        extraction_warnings=warnings or [],
+        extraction_warnings=warnings,
     )
 
 

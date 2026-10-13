@@ -574,7 +574,9 @@ class Tier1Classifier:
         
         # Authority claims
         elif claim_type == "authority":
-            if "police" in matched_lower:
+            if "police" in matched_lower or "station" in matched_lower:
+                return "police"
+            if "inspector" in matched_lower or "officer" in matched_lower:
                 return "police"
             if "lawyer" in matched_lower or "advocate" in matched_lower:
                 return "lawyer"
@@ -584,17 +586,14 @@ class Tier1Classifier:
     
     def _extract_amount(self, text: str) -> Optional[float]:
         """Extract numeric amount from money request text."""
-        # Look for digit patterns
-        amount_pattern = r"(\d+(?:,\d{3})*(?:\.\d{2})?)"
+        # Look for consecutive digits (handles 5000, 50000, etc.)
+        amount_pattern = r"(\d{3,})"  # At least 3 digits for meaningful amounts
         matches = re.findall(amount_pattern, text)
         
         if matches:
-            # Take the first numeric value and remove commas
-            amount_str = matches[0].replace(",", "")
-            try:
-                return float(amount_str)
-            except ValueError:
-                pass
+            # Take the largest numeric value (usually the actual amount)
+            amounts = [float(m) for m in matches]
+            return max(amounts)
         
         return None
     
