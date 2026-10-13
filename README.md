@@ -2,7 +2,7 @@
 
 VISHWAS is an intelligent system designed to analyze authorized call recordings and help identify potential fraud, suspicious requests, impersonation attempts, threats, urgency tactics, and attempts to obtain sensitive information.
 
-## Current Status: Phase 1 - Foundation
+## Current Status: Phase 1 - Foundation Complete ✅
 
 Phase 1 establishes the complete project infrastructure with a working end-to-end workflow using mock analysis. The architecture is designed to support future integration of advanced AI models without requiring rewrites.
 
@@ -11,10 +11,12 @@ Phase 1 establishes the complete project infrastructure with a working end-to-en
 - ✅ SQLite database with SQLAlchemy ORM
 - ✅ Audio file upload and validation
 - ✅ Mock analysis service (clearly labeled)
-- ✅ Streamlit web dashboard
+- ✅ Modern React dashboard (TypeScript + Vite + Tailwind)
 - ✅ Android application (Kotlin + Jetpack Compose)
 - ✅ Comprehensive API documentation
 - ✅ Automated testing suite
+- ✅ PII masking for LLM protection
+- ✅ Trust Graph foundation
 
 ## Architecture Overview
 
@@ -39,7 +41,7 @@ Adversarial Reasoning → Deterministic Decision → Action → Clients
 vishwas/
 ├── android-app/          # Android mobile application
 ├── backend/              # FastAPI backend service
-├── web-dashboard/        # Streamlit web interface
+├── vishwas-frontend/     # React web dashboard (TypeScript + Vite)
 ├── sample_recordings/    # Demo audio files
 ├── docs/                 # Documentation
 └── README.md
@@ -49,35 +51,53 @@ vishwas/
 
 ### Prerequisites
 
-- Python 3.11+
-- Android Studio (for Android app)
-- Java 17+ (for Android development)
+- Python 3.9+
+- Node.js 18+
+- Android Studio (for Android app, optional)
 - Git
 
-### Backend Setup
+### Automated Setup (Recommended)
 
-```bash
+```powershell
+# Start both backend and frontend
+.\start-vishwas.ps1
+```
+
+Access the application:
+- **React Dashboard:** http://localhost:5173
+- **Backend API:** http://localhost:8000
+- **API Docs:** http://localhost:8000/docs
+
+### Manual Setup
+
+#### Backend
+
+```powershell
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+venv\Scripts\activate  # On Unix: source venv/bin/activate
 pip install -r requirements.txt
 
 # Create .env file
-cp .env.example .env
-
-# Initialize database
-python -m app.database.init_db
+copy .env.example .env
 
 # Run the server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Backend will be available at: http://localhost:8000
-API documentation: http://localhost:8000/docs
+#### Frontend
 
-### Web Dashboard Setup
+```powershell
+cd vishwas-frontend
+npm install
+npm run dev
+```
 
-```bash
+### Stop Services
+
+```powershell
+.\stop-vishwas.ps1
+```
 cd web-dashboard
 python -m venv venv
 source venv/bin/activate

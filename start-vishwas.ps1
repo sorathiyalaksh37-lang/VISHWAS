@@ -1,11 +1,21 @@
-# VISHWAS Integration Startup Script
-# Starts both backend and frontend services
+# VISHWAS Full Stack Startup Script
+# Starts backend API + React frontend dashboard
 
-Write-Host "🛡️  Starting VISHWAS Call Fraud Detection System..." -ForegroundColor Cyan
+Write-Host "🛡️  Starting VISHWAS Full Stack..." -ForegroundColor Cyan
 Write-Host ""
 
+# Check Node.js installation
+Write-Host "[1/6] Checking Node.js installation..." -ForegroundColor Yellow
+try {
+    $nodeVersion = node --version 2>&1
+    Write-Host "  ✓ Found: $nodeVersion" -ForegroundColor Green
+} catch {
+    Write-Host "  ✗ Node.js not found. Please install Node.js 18+ first." -ForegroundColor Red
+    exit 1
+}
+
 # Check Python installation
-Write-Host "[1/5] Checking Python installation..." -ForegroundColor Yellow
+Write-Host "[2/6] Checking Python installation..." -ForegroundColor Yellow
 try {
     $pythonVersion = python --version 2>&1
     Write-Host "  ✓ Found: $pythonVersion" -ForegroundColor Green
@@ -15,7 +25,7 @@ try {
 }
 
 # Check if backend .env exists
-Write-Host "[2/5] Checking backend configuration..." -ForegroundColor Yellow
+Write-Host "[3/6] Checking backend configuration..." -ForegroundColor Yellow
 if (-not (Test-Path "backend\.env")) {
     Write-Host "  ! No .env file found. Creating from template..." -ForegroundColor Yellow
     Copy-Item "backend\.env.example" "backend\.env"
@@ -25,8 +35,20 @@ if (-not (Test-Path "backend\.env")) {
     Write-Host "  ✓ Found backend\.env" -ForegroundColor Green
 }
 
+# Check if frontend node_modules exists
+Write-Host "[4/6] Checking frontend dependencies..." -ForegroundColor Yellow
+if (-not (Test-Path "vishwas-frontend\node_modules")) {
+    Write-Host "  ! Dependencies not installed. Running npm install..." -ForegroundColor Yellow
+    Push-Location vishwas-frontend
+    npm install
+    Pop-Location
+    Write-Host "  ✓ Frontend dependencies installed" -ForegroundColor Green
+} else {
+    Write-Host "  ✓ Frontend dependencies found" -ForegroundColor Green
+}
+
 # Start backend
-Write-Host "[3/5] Starting backend server..." -ForegroundColor Yellow
+Write-Host "[5/6] Starting backend server..." -ForegroundColor Yellow
 $backendJob = Start-Job -ScriptBlock {
     Set-Location $using:PWD
     cd backend
@@ -35,7 +57,7 @@ $backendJob = Start-Job -ScriptBlock {
 Write-Host "  ✓ Backend starting (Job ID: $($backendJob.Id))..." -ForegroundColor Green
 
 # Wait for backend to be ready
-Write-Host "[4/5] Waiting for backend to initialize..." -ForegroundColor Yellow
+Write-Host "      Waiting for backend to initialize..." -ForegroundColor Gray
 $maxAttempts = 30
 $attempt = 0
 $backendReady = $false
@@ -47,12 +69,12 @@ while ($attempt -lt $maxAttempts -and -not $backendReady) {
         $response = Invoke-WebRequest -Uri "http://localhost:8000/api/v1/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
         if ($response.StatusCode -eq 200) {
             $backendReady = $true
-            Write-Host "  ✓ Backend ready!" -ForegroundColor Green
+            Write-Host "      ✓ Backend ready!" -ForegroundColor Green
         } else {
-            Write-Host "  ⏳ Attempt $attempt/$maxAttempts..." -ForegroundColor Gray
+            Write-Host "      ⏳ Attempt $attempt/$maxAttempts..." -ForegroundColor Gray
         }
     } catch {
-        Write-Host "  ⏳ Attempt $attempt/$maxAttempts..." -ForegroundColor Gray
+        Write-Host "      ⏳ Attempt $attempt/$maxAttempts..." -ForegroundColor Gray
     }
 }
 
@@ -63,12 +85,11 @@ if (-not $backendReady) {
 }
 
 # Start frontend
-Write-Host "[5/5] Starting frontend dashboard..." -ForegroundColor Yellow
+Write-Host "[6/6] Starting React frontend..." -ForegroundColor Yellow
 $frontendJob = Start-Job -ScriptBlock {
     Set-Location $using:PWD
-    cd web-dashboard
-    $env:VISHWAS_API_URL = "http://localhost:8000/api/v1"
-    streamlit run app.py --server.port 8501 --server.headless true
+    cd vishwas-frontend
+    npm run dev
 }
 Write-Host "  ✓ Frontend starting (Job ID: $($frontendJob.Id))..." -ForegroundColor Green
 
@@ -78,12 +99,12 @@ Start-Sleep -Seconds 3
 # Summary
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-Write-Host "🎉 VISHWAS is running!" -ForegroundColor Green
+Write-Host "🎉 VISHWAS Full Stack is running!" -ForegroundColor Green
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "📊 Frontend Dashboard: http://localhost:8501" -ForegroundColor Cyan
-Write-Host "🔧 Backend API:        http://localhost:8000" -ForegroundColor Cyan
-Write-Host "📖 API Docs:           http://localhost:8000/docs" -ForegroundColor Cyan
+Write-Host "📊 React Dashboard:   http://localhost:5173" -ForegroundColor Cyan
+Write-Host "🔧 Backend API:       http://localhost:8000" -ForegroundColor Cyan
+Write-Host "📖 API Docs:          http://localhost:8000/docs" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Background Jobs:" -ForegroundColor Yellow
 Write-Host "  Backend:  Job ID $($backendJob.Id)" -ForegroundColor Gray
@@ -94,7 +115,7 @@ Write-Host "  Backend:  Receive-Job $($backendJob.Id)" -ForegroundColor Gray
 Write-Host "  Frontend: Receive-Job $($frontendJob.Id)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "To stop all services:" -ForegroundColor Yellow
-Write-Host "  .\stop-vishwas.ps1" -ForegroundColor Gray
+Write-Host "  .\stop-vishwas-full.ps1" -ForegroundColor Gray
 Write-Host "  OR manually: Stop-Job $($backendJob.Id), $($frontendJob.Id)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
@@ -128,3 +149,4 @@ try {
     Write-Host ""
     Write-Host "Monitoring stopped. Services are still running in background." -ForegroundColor Yellow
 }
+
