@@ -237,6 +237,65 @@ class RealAnalysisService:
                     f"(score={risk_score}, channel={assessment.channel_status})"
                 )
                 
+                # === Phase 3: Tier 2 Agentic AI (Optional) ===
+                # Run Fraud + Skeptic agents if enabled
+                agent_analysis_json = None
+                try:
+                    from app.agents.orchestrator import AgentOrchestrator
+                    from app.core.config import settings
+                    
+                    if settings.tier2_enabled:
+                        logger.info(f"[{call_id}] Running Tier 2 agent analysis")
+                        
+                        orchestrator = AgentOrchestrator()
+                        
+                        # Get score breakdown from judge (need to extract it)
+                        # For now, create a mock breakdown from assessment data
+                        from app.trust_engine.scoring import ScoreBreakdown
+                        score_breakdown = ScoreBreakdown(
+                            identity=assessment.category_scores.get("identity", 0),
+                            request=assessment.category_scores.get("request", 0),
+                            behavior=assessment.category_scores.get("behavior", 0),
+                            channel=assessment.category_scores.get("channel", 0),
+                            voice=assessment.category_scores.get("voice", 0),
+                            total=assessment.score,
+                            final_score=assessment.score,
+                            reasons=assessment.reasons,
+                            fired_rules=assessment.fired_rules,
+                            applied_floors=assessment.applied_floors
+                        )
+                        
+                        # Run agent orchestration
+                        agent_result = await orchestrator.analyze(
+                            call_id=call_id,
+                            evidence=evidence,
+                            trust_context=trust_graph.get_trust_context(claimed_contact, None, None),
+                            score_breakdown=score_breakdown,
+                            timeout_per_agent=settings.tier2_timeout
+                        )
+                        
+                        # Store agent analysis results
+                        agent_analysis_json = json.dumps({
+                            "tier2_status": agent_result.tier2_status,
+                            "fraud_findings": [f.model_dump() for f in agent_result.fraud_findings],
+                            "skeptic_challenges": [c.model_dump() for c in agent_result.skeptic_challenges],
+                            "agent_metadata": agent_result.agent_metadata,
+                            "warnings": agent_result.warnings
+                        }, ensure_ascii=False)
+                        
+                        logger.info(
+                            f"[{call_id}] Tier 2: {agent_result.tier2_status}, "
+                            f"{len(agent_result.fraud_findings)} findings, "
+                            f"{len(agent_result.skeptic_challenges)} challenges"
+                        )
+                    
+                except Exception as e:
+                    logger.warning(
+                        f"[{call_id}] Tier 2 agent analysis failed (Phase 2 result preserved): {e}",
+                        exc_info=True
+                    )
+                    # Tier 2 failure does not affect Phase 2 results
+                
             except Exception as e:
                 logger.warning(
                     f"[{call_id}] Trust Engine assessment failed, falling back to preliminary: {e}",
@@ -261,7 +320,7 @@ class RealAnalysisService:
 
             report.transcript_json = json.dumps(transcript_dict, ensure_ascii=False)
             report.voice_json = json.dumps(voice_dict, ensure_ascii=False)
-            report.agent_findings_json = json.dumps([], ensure_ascii=False)
+            report.agent_findings_json = agent_analysis_json if agent_analysis_json else json.dumps([], ensure_ascii=False)
             report.risk_level = risk_level
             report.risk_score = risk_score
             report.reasons_json = json.dumps(reasons, ensure_ascii=False)

@@ -3,7 +3,7 @@ Configuration management for VISHWAS backend.
 Loads settings from environment variables.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -44,6 +44,16 @@ class Settings(BaseSettings):
     enable_voice_layer: bool = True
     voice_min_duration_s: float = 3.0
     voice_min_snr_db: float = 5.0
+
+    # Tier 2 — Agentic AI (Phase 3)
+    tier2_enabled: bool = False
+    tier2_provider: str = "openai"      # openai | anthropic | local
+    tier2_model: str = "gpt-4o-mini"
+    tier2_api_key: Optional[str] = None
+    tier2_timeout: float = 30.0
+    tier2_max_retries: int = 2
+    tier2_max_input_tokens: int = 4000
+    tier2_max_output_tokens: int = 2000
 
     # Logging
     log_level: str = "INFO"

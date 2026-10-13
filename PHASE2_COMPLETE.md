@@ -29,47 +29,47 @@ Phase 2 Trust Engine is **fully implemented and integrated** into the VISHWAS ba
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                   VISHWAS Analysis Pipeline                  │
+│                   VISHWAS Analysis Pipeline                 │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  POST /analyze/recording                                     │
-│  ├─ Upload audio file                                        │
-│  ├─ Create CallRecord (status: queued)                       │
-│  └─ Queue background task                                    │
+│  POST /analyze/recording                                    │
+│  ├─ Upload audio file                                       │
+│  ├─ Create CallRecord (status: queued)                      │
+│  └─ Queue background task                                   │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  RealAnalysisService.analyze_call()                          │
-│  ├─ Step 1: Convert audio → 16kHz mono WAV                   │
-│  ├─ Step 2: Validate audio quality                           │
+│  RealAnalysisService.analyze_call()                         │
+│  ├─ Step 1: Convert audio → 16kHz mono WAV                  │
+│  ├─ Step 2: Validate audio quality                          │
 │  ├─ Step 3: Run ASR (faster-whisper) + Voice Layer          │
-│  │   ├─ ASR: Transcribe to segments                          │
-│  │   └─ Voice: Spoof detection + voiceprint match            │
+│  │   ├─ ASR: Transcribe to segments                         │
+│  │   └─ Voice: Spoof detection + voiceprint match           │
 │  ├─ Step 4: Extract Evidence (Tier 1 + Session)             │
-│  │   ├─ Claims (identity, relationship)                      │
-│  │   ├─ Requests (money, credentials, actions)               │
-│  │   ├─ Behavior (urgency, secrecy, pressure)                │
-│  │   └─ Voice (spoof indicators)                             │
+│  │   ├─ Claims (identity, relationship)                     │
+│  │   ├─ Requests (money, credentials, actions)              │
+│  │   ├─ Behavior (urgency, secrecy, pressure)               │
+│  │   └─ Voice (spoof indicators)                            │
 │  ├─ Step 5: **Trust Engine Assessment** ⭐ NEW              │
-│  │   ├─ TrustGraph.get_trust_context()                       │
-│  │   │   └─ Check caller against saved contacts              │
-│  │   ├─ TrustScorer.calculate_score()                        │
-│  │   │   ├─ Category scoring (identity:25, request:30...)    │
-│  │   │   ├─ Apply category caps                              │
-│  │   │   └─ Apply hard-rule floors                           │
-│  │   └─ TrustJudge.evaluate()                                │
-│  │       ├─ Generate risk assessment                         │
-│  │       ├─ Create verification recommendations              │
-│  │       └─ Calculate audit hash                             │
+│  │   ├─ TrustGraph.get_trust_context()                      │
+│  │   │   └─ Check caller against saved contacts             │
+│  │   ├─ TrustScorer.calculate_score()                       │
+│  │   │   ├─ Category scoring (identity:25, request:30...)   │
+│  │   │   ├─ Apply category caps                             │
+│  │   │   └─ Apply hard-rule floors                          │
+│  │   └─ TrustJudge.evaluate()                               │
+│  │       ├─ Generate risk assessment                        │
+│  │       ├─ Create verification recommendations             │
+│  │       └─ Calculate audit hash                            │
 │  └─ Step 6: Persist to AnalysisReport (status: completed)   │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  GET /call/{id}/state                                        │
+│  GET /call/{id}/state                                       │
 │  └─ Return: risk_score, risk_level, reasons, actions        │
 └─────────────────────────────────────────────────────────────┘
 ```

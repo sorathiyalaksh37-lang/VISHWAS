@@ -23,5 +23,8 @@ faster-whisper>=0.10.0
 # torchaudio>=2.0.0
 # speechbrain>=0.5.16
 
+# ── Tier 2 Agentic AI (Phase 3) — optional ────────────────────────────────────
+# openai>=1.0.0
+
 # ── Utilities ─────────────────────────────────────────────────────────────────
 aiofiles>=23.0.0
