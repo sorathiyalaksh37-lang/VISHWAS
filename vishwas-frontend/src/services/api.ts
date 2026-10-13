@@ -164,7 +164,7 @@ class APIClient {
    */
   async getCallStatus(callId: string): Promise<CallStatusResponse | null> {
     try {
-      const response = await fetch(`${this.baseURL}/calls/${callId}/status`, {
+      const response = await fetch(`${this.baseURL}/call/${callId}/status`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
       })
@@ -208,7 +208,7 @@ class APIClient {
    */
   async getReport(callId: string): Promise<AnalysisReportResponse | null> {
     try {
-      const response = await fetch(`${this.baseURL}/calls/${callId}/report`, {
+      const response = await fetch(`${this.baseURL}/call/${callId}/state`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
       })

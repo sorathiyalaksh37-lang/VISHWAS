@@ -59,20 +59,6 @@ export function CallHistory() {
     }
   })
 
-  function getRiskBadgeClass(riskLevel?: string): string {
-    switch (riskLevel) {
-      case 'low':
-        return 'history__badge history__badge--low'
-      case 'medium':
-        return 'history__badge history__badge--medium'
-      case 'high':
-      case 'critical':
-        return 'history__badge history__badge--high'
-      default:
-        return 'history__badge'
-    }
-  }
-
   function getStatusBadgeClass(status: string): string {
     switch (status) {
       case 'completed':
