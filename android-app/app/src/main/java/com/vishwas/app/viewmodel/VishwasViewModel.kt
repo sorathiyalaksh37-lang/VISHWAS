@@ -77,8 +77,25 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
     private val _streamingVoiceState = MutableStateFlow<StreamingVoiceState>(StreamingVoiceState.Idle)
     val streamingVoiceState: StateFlow<StreamingVoiceState> = _streamingVoiceState.asStateFlow()
     
+    private var activeStreamingSessionId: String? = null
+    
     init {
         checkBackendHealth()
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        // Cleanup active streaming session if exists
+        activeStreamingSessionId?.let { sessionId ->
+            viewModelScope.launch {
+                try {
+                    repository.deleteVoiceStream(sessionId)
+                    Log.d(TAG, "Cleaned up streaming session on ViewModel clear: $sessionId")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to cleanup streaming session on clear", e)
+                }
+            }
+        }
     }
     
     /**
@@ -270,6 +287,7 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
         return try {
             repository.startVoiceStream().fold(
                 onSuccess = { response ->
+                    activeStreamingSessionId = response.sessionId
                     _streamingVoiceState.value = StreamingVoiceState.Listening(
                         sessionId = response.sessionId,
                         spoofProb = null,
@@ -353,6 +371,9 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
             repository.deleteVoiceStream(sessionId).fold(
                 onSuccess = {
                     Log.d(TAG, "Voice stream session deleted: $sessionId")
+                    if (activeStreamingSessionId == sessionId) {
+                        activeStreamingSessionId = null
+                    }
                 },
                 onFailure = { error ->
                     Log.e(TAG, "Failed to delete voice stream", error)
@@ -368,5 +389,6 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
      */
     fun resetVoiceStreamingState() {
         _streamingVoiceState.value = StreamingVoiceState.Idle
+        activeStreamingSessionId = null
     }
 }

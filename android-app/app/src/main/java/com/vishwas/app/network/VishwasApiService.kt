@@ -46,14 +46,14 @@ interface VishwasApiService {
     suspend fun startVoiceStream(): Response<StreamSessionResponse>
     
     @Multipart
-    @POST("voice-detection/stream/{sessionId}/chunk")
+    @POST("voice-detection/stream/{session_id}/chunk")
     suspend fun sendVoiceChunk(
-        @Path("sessionId") sessionId: String,
+        @Path("session_id") sessionId: String,
         @Part chunk: MultipartBody.Part
     ): Response<StreamChunkResponse>
     
-    @DELETE("voice-detection/stream/{sessionId}")
+    @DELETE("voice-detection/stream/{session_id}")
     suspend fun deleteVoiceStream(
-        @Path("sessionId") sessionId: String
+        @Path("session_id") sessionId: String
     ): Response<StreamDeleteResponse>
 }

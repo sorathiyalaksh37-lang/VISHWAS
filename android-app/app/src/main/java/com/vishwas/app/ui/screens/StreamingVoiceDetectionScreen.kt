@@ -323,6 +323,9 @@ fun StreamingVoiceDetectionScreen(
                     Button(
                         onClick = {
                             scope.launch {
+                                // Reset waveform data for new session
+                                waveformData = FloatArray(100) { 0f }
+                                
                                 // Start session
                                 val result = viewModel.startVoiceStreaming()
                                 result.onSuccess { sessionId ->
@@ -455,7 +458,7 @@ fun StreamingVoiceDetectionScreen(
                             contentDescription = null
                         )
                         Text(
-                            text = "Real-time voice spoofing detection analyzes your microphone input in ~1.5 second chunks. Results update continuously as you speak.",
+                            text = "Real-time voice spoofing detection analyzes your microphone input in ~1.5 second chunks. Results update continuously as you speak. Audio is processed in ~1.5s chunks; the final partial chunk is not analyzed.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
