@@ -122,13 +122,17 @@ export function VoiceDetectionPage() {
         bufferPositionRef.current = 0
         position = 0
 
+        console.log('[VoiceDetection] Chunk ready, size:', chunk.length, 'bytes')
+        
         // Send chunk to backend
         // Note: Partial chunks (< 48000 bytes) are dropped when recording stops.
         // This is expected behavior as the backend requires exactly 48000 bytes per chunk.
         if (sessionId) {
           try {
             const blob = new Blob([chunk], { type: 'application/octet-stream' })
+            console.log('[VoiceDetection] Sending chunk to backend, session:', sessionId)
             const response = await apiClient.sendVoiceChunk(sessionId, blob)
+            console.log('[VoiceDetection] Chunk response:', response)
 
             if (response) {
               setSpoofProb(response.spoof_prob)
@@ -168,6 +172,7 @@ export function VoiceDetectionPage() {
   // Start recording
   async function startRecording() {
     try {
+      console.log('[VoiceDetection] Starting recording...')
       setStatus('requesting-mic')
       setErrorMsg('')
       setSpoofProb(null)
@@ -176,16 +181,22 @@ export function VoiceDetectionPage() {
       bufferPositionRef.current = 0
 
       // Start streaming session
+      console.log('[VoiceDetection] Calling startVoiceStream...')
       const session = await apiClient.startVoiceStream()
+      console.log('[VoiceDetection] Session response:', session)
+      
       if (!session) {
+        console.error('[VoiceDetection] No session returned from backend')
         setStatus('error')
         setErrorMsg('Failed to start session - backend unavailable')
         return
       }
 
       setSessionId(session.session_id)
+      console.log('[VoiceDetection] Session ID set:', session.session_id)
 
       // Request microphone access
+      console.log('[VoiceDetection] Requesting microphone access...')
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: SAMPLE_RATE,
@@ -194,6 +205,7 @@ export function VoiceDetectionPage() {
           noiseSuppression: false,
         },
       })
+      console.log('[VoiceDetection] Microphone access granted')
 
       mediaStreamRef.current = stream
 
@@ -212,14 +224,17 @@ export function VoiceDetectionPage() {
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
         const inputData = e.inputBuffer.getChannelData(0)
+        console.log('[VoiceDetection] Audio data received, length:', inputData.length)
         processAudio(inputData)
       }
 
       source.connect(processor)
       processor.connect(audioContext.destination)
 
+      console.log('[VoiceDetection] Audio pipeline connected successfully')
       setRecording(true)
       setStatus('listening')
+      console.log('[VoiceDetection] Recording started')
     } catch (error) {
       console.error('Error starting recording:', error)
       setStatus('error')
