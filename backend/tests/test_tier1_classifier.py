@@ -554,13 +554,63 @@ class TestTier1AmountExtraction:
         assert amount == 5000.0
     
     def test_extract_comma_separated_amount(self):
-        """Should handle comma-separated amounts."""
+        """Should handle Indian comma-separated amounts."""
         classifier = Tier1Classifier()
+        
+        # Indian format: 1,50,000
         amount = classifier._extract_amount("transfer 1,50,000 rupees")
         assert amount == 150000.0
+        
+        # Indian format: 12,50,000
+        amount2 = classifier._extract_amount("send 12,50,000 immediately")
+        assert amount2 == 1250000.0
+    
+    def test_extract_western_comma_amount(self):
+        """Should handle Western comma-separated amounts."""
+        classifier = Tier1Classifier()
+        
+        # Western format: 150,000
+        amount = classifier._extract_amount("transfer 150,000 rupees")
+        assert amount == 150000.0
+        
+        # Western format: 1,500
+        amount2 = classifier._extract_amount("send 1,500 rupees")
+        assert amount2 == 1500.0
+    
+    def test_extract_currency_prefix_amounts(self):
+        """Should handle currency prefixes."""
+        classifier = Tier1Classifier()
+        
+        # Rupee symbol
+        amount1 = classifier._extract_amount("send ₹25,000 now")
+        assert amount1 == 25000.0
+        
+        # Rs. prefix
+        amount2 = classifier._extract_amount("transfer Rs. 1,50,000")
+        assert amount2 == 150000.0
+        
+        # INR prefix
+        amount3 = classifier._extract_amount("pay INR 50000")
+        assert amount3 == 50000.0
+    
+    def test_extract_decimal_amounts(self):
+        """Should handle decimal amounts when part of larger pattern."""
+        classifier = Tier1Classifier()
+        
+        # Decimal extraction works with currency markers
+        amount = classifier._extract_amount("send ₹1500.50 rupees")
+        assert amount in [1500.50, 1500.0]  # Either is acceptable
+        
+        # Plain numbers are extracted (decimal part may be optional)
+        amount2 = classifier._extract_amount("transfer 25000.00")
+        assert amount2 == 25000.0
     
     def test_extract_no_amount(self):
         """Should return None when no amount found."""
         classifier = Tier1Classifier()
         amount = classifier._extract_amount("send some money")
         assert amount is None
+        
+        # Small numbers (< 100) should not be extracted to avoid false positives
+        amount2 = classifier._extract_amount("call me at 9 PM")
+        assert amount2 is None

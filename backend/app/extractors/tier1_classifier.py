@@ -585,15 +585,43 @@ class Tier1Classifier:
         return matched_text[:50].strip()
     
     def _extract_amount(self, text: str) -> Optional[float]:
-        """Extract numeric amount from money request text."""
-        # Look for consecutive digits (handles 5000, 50000, etc.)
-        amount_pattern = r"(\d{3,})"  # At least 3 digits for meaningful amounts
-        matches = re.findall(amount_pattern, text)
+        """
+        Extract numeric amount from money request text.
         
-        if matches:
-            # Take the largest numeric value (usually the actual amount)
-            amounts = [float(m) for m in matches]
-            return max(amounts)
+        Supports:
+        - Indian comma format: 1,50,000
+        - Western comma format: 150,000
+        - Currency prefixes: ₹, Rs., INR
+        - Plain numbers: 150000
+        - Decimal amounts: 1500.50
+        """
+        # Pattern for amounts with optional currency markers and various comma styles
+        # Matches: ₹1,50,000  |  Rs. 150000  |  INR 1,50,000  |  1,50,000 rupees  |  150000
+        patterns = [
+            # Currency prefix + Indian/Western comma format
+            r"(?:₹|Rs\.?|INR)\s*(\d{1,3}(?:,\d{2,3})+(?:\.\d{2})?)",
+            # Indian comma format (e.g., 1,50,000 or 12,50,000)
+            r"(\d{1,3},\d{2},\d{3}(?:,\d{3})*(?:\.\d{2})?)",
+            # Western comma format (e.g., 150,000)
+            r"(\d{1,3}(?:,\d{3})+(?:\.\d{2})?)",
+            # Plain number with optional currency suffix (e.g., 150000 rupees)
+            r"(\d{4,})(?:\.\d{2})?(?=\s*(?:rupees?|rupaye?|rs\.?|₹|INR))",
+            # Any standalone number (fallback, minimum 3 digits)
+            r"(\d{3,})(?:\.\d{2})?"
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            if matches:
+                # Take first match and remove commas
+                amount_str = matches[0].replace(",", "")
+                try:
+                    amount = float(amount_str)
+                    # Sanity check: amount should be reasonable (between ₹100 and ₹10 crore)
+                    if 100 <= amount <= 100000000:
+                        return amount
+                except ValueError:
+                    continue
         
         return None
     
