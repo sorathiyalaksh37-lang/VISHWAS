@@ -15,6 +15,7 @@ import com.vishwas.app.viewmodel.VishwasViewModel
 object Routes {
     const val HOME = "home"
     const val UPLOAD = "upload"
+    const val RECORD = "record"
     const val RESULTS = "results/{callId}"
     const val HISTORY = "history"
     
@@ -37,6 +38,7 @@ fun VishwasNavHost(
             HomeScreen(
                 viewModel = viewModel,
                 onNavigateToUpload = { navController.navigate(Routes.UPLOAD) },
+                onNavigateToRecord = { navController.navigate(Routes.RECORD) },
                 onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
                 onNavigateToResults = { callId ->
                     navController.navigate(Routes.results(callId))
@@ -46,6 +48,16 @@ fun VishwasNavHost(
         
         composable(Routes.UPLOAD) {
             UploadScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToResults = { callId ->
+                    navController.navigate(Routes.results(callId))
+                }
+            )
+        }
+
+        composable(Routes.RECORD) {
+            RecordScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToResults = { callId ->

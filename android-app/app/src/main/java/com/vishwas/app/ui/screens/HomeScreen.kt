@@ -16,6 +16,7 @@ import com.vishwas.app.viewmodel.VishwasViewModel
 fun HomeScreen(
     viewModel: VishwasViewModel,
     onNavigateToUpload: () -> Unit,
+    onNavigateToRecord: () -> Unit = {},
     onNavigateToHistory: () -> Unit,
     onNavigateToResults: (String) -> Unit
 ) {
@@ -132,6 +133,16 @@ fun HomeScreen(
                 Icon(Icons.Default.Upload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Upload Recording")
+            }
+            
+            Button(
+                onClick = onNavigateToRecord,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = uiState.isBackendHealthy
+            ) {
+                Icon(Icons.Default.Mic, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Record a Call")
             }
             
             OutlinedButton(
