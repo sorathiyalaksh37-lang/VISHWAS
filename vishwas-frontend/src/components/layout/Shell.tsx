@@ -5,8 +5,12 @@ import { Sidebar, type NavItem } from './Sidebar'
 /** Map each nav item to its page title and subtitle shown in the top header */
 const PAGE_META: Record<NavItem, { title: string; subtitle: string }> = {
   overview: {
-    title: 'Call Security Overview',
-    subtitle: 'Monitor and review the security posture of your analysed calls.',
+    title: 'VISHWAS',
+    subtitle: 'A voice can be cloned. Trust must be verified.',
+  },
+  'trust-graph': {
+    title: 'Trust Graph',
+    subtitle: 'Explore trusted relationships, verification status, and connections relevant to call security.',
   },
   analyse: {
     title: 'Analyse a Call',

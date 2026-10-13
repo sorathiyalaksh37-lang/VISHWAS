@@ -6,6 +6,7 @@ import { AnalysisReport } from './pages/AnalysisReport'
 import { CallHistory } from './pages/CallHistory'
 import { Overview } from './pages/Overview'
 import { PrivacySettings } from './pages/PrivacySettings'
+import { TrustGraphPage } from './pages/TrustGraphPage'
 import type { NavItem } from './components/layout/Sidebar'
 
 const PREFS_KEY = 'vishwas:ui-prefs'
@@ -68,7 +69,9 @@ function App() {
   function renderPage() {
     switch (activeItem) {
       case 'overview':
-        return <Overview />
+        return <Overview onNavigate={handleNavigate} />
+      case 'trust-graph':
+        return <TrustGraphPage />
       case 'analyse':
         return showReport ? (
           <AnalysisReport onBack={() => setShowReport(false)} />

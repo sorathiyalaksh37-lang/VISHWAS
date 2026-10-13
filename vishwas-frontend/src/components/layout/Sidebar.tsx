@@ -1,13 +1,14 @@
 import {
   BarChart2,
   ClockIcon,
+  GitFork,
   MicVocalIcon,
   Settings2,
   ShieldCheckIcon,
   X,
 } from 'lucide-react'
 
-export type NavItem = 'overview' | 'analyse' | 'history' | 'settings'
+export type NavItem = 'overview' | 'trust-graph' | 'analyse' | 'history' | 'settings'
 
 interface NavEntry {
   id: NavItem
@@ -20,6 +21,11 @@ const NAV_ITEMS: NavEntry[] = [
     id: 'overview',
     label: 'Overview',
     icon: <BarChart2 size={18} aria-hidden="true" />,
+  },
+  {
+    id: 'trust-graph',
+    label: 'Trust Graph',
+    icon: <GitFork size={18} aria-hidden="true" />,
   },
   {
     id: 'analyse',
