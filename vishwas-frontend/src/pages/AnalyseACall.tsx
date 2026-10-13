@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { AlertCircleIcon, FileAudioIcon, MicVocalIcon, CheckCircleIcon, LoaderIcon } from 'lucide-react'
 import { AudioUpload, type AudioFileState } from '../components/shared/AudioUpload'
-import { apiClient, type UploadResponse, type CallStatusResponse } from '../services/api'
+import { apiClient } from '../services/api'
 
 interface AnalyseACallProps {
   /** Called when the user wants to view the analysis report. */
-  onViewReport?: () => void
+  onViewReport?: (callId: string) => void
 }
 
 type AnalysisState = 
@@ -212,7 +212,11 @@ export function AnalyseACall({ onViewReport }: AnalyseACallProps) {
           {canViewReport && onViewReport && (
             <button
               className="btn-primary"
-              onClick={onViewReport}
+              onClick={() => {
+                if (analysisState.type === 'completed') {
+                  onViewReport(analysisState.callId)
+                }
+              }}
               aria-label="View analysis report"
             >
               View Report
@@ -222,7 +226,7 @@ export function AnalyseACall({ onViewReport }: AnalyseACallProps) {
           {onViewReport && !canViewReport && (
             <button
               className="btn-ghost btn-ghost--sm"
-              onClick={onViewReport}
+              onClick={() => onViewReport('')}
               aria-label="View analysis report layout"
             >
               View Report Layout
