@@ -33,6 +33,8 @@ export interface AudioFileState {
   size: number
   /** Non-null means the file was rejected. */
   error: string | null
+  /** The actual File object for upload */
+  file?: File
 }
 
 interface AudioUploadProps {
@@ -60,10 +62,11 @@ export function AudioUpload({ inputId, fileState, onFileChange }: AudioUploadPro
         name: file.name,
         size: file.size,
         error: 'Unsupported file type. Please upload a WAV, MP3, or M4A file.',
+        file: undefined,
       })
       return
     }
-    onFileChange({ name: file.name, size: file.size, error: null })
+    onFileChange({ name: file.name, size: file.size, error: null, file })
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {

@@ -242,6 +242,3 @@ class APIClient {
 // ── Export singleton ───────────────────────────────────────────────────────────
 
 export const apiClient = new APIClient(API_BASE_URL)
-
-</content>
-</invoke>

@@ -193,7 +193,6 @@ export function AnalyseACall({ onViewReport }: AnalyseACallProps) {
           inputId="analyse-audio-file-input"
           fileState={fileState}
           onFileChange={handleFileChange}
-          disabled={isAnalyzing}
         />
 
         {/* Status message */}
