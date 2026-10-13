@@ -36,8 +36,8 @@ def test_get_report_before_completion(client, sample_audio_file):
     if report_response.status_code == 200:
         # Analysis completed (mock behavior)
         data = report_response.json()
-        assert "risk_level" in data
-        assert "risk_score" in data
+        assert "level" in data  # v3 API: risk_level renamed to level
+        assert "score" in data  # v3 API: risk_score renamed to score
 
 
 def test_full_workflow(client, sample_audio_file):
