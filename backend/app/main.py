@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.database.session import init_db
 from app.api.routes import health, calls
+from app.api.routes import analyze
 
 # Setup logging
 logger = setup_logging()
@@ -27,6 +28,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting VISHWAS backend...")
     logger.info(f"Environment: {'DEBUG' if settings.debug else 'PRODUCTION'}")
     logger.info(f"Analysis mode: {settings.analysis_mode}")
+    logger.info(f"Whisper model: {settings.whisper_model_size} ({settings.whisper_compute_type} on {settings.whisper_device})")
+    logger.info(f"Voice layer: {'enabled' if settings.enable_voice_layer else 'disabled'}")
     
     # Initialize database
     init_db()
@@ -60,7 +63,8 @@ app.add_middleware(
 
 # Register routers
 app.include_router(health.router, prefix="/api/v1", tags=["Health"])
-app.include_router(calls.router, prefix="/api/v1", tags=["Calls"])
+app.include_router(analyze.router, prefix="/api/v1", tags=["Analysis"])  # M2 routes
+app.include_router(calls.router, prefix="/api/v1", tags=["Calls (legacy)"])  # backward compat
 
 
 @app.exception_handler(Exception)

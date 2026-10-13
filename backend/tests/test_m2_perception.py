@@ -1,19 +1,7 @@
-"""
-Member 2 Tests — Backend + Perception layer.
-
-Tests cover:
-  - Audio preprocessing (convert_to_wav, validate_audio, estimate_snr)
-  - ASR service (graceful unavailability, result structure)
-  - Voice layer (quality gate, unavailability path)
-  - API endpoints: /analyze/recording, /call/{id}/state,
-                   /call/{id}/status, /contacts, /contacts/{id}/voiceprint
-  - Job status lifecycle (queued → processing → completed/failed)
-
-Run with:  pytest backend/tests/test_m2_perception.py -v
-"""
 import io
 import json
 import struct
+import tempfile
 import wave
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -23,18 +11,28 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database.base import Base
-from app.database.session import get_db
-from app.main import app
-
 # ── In-memory SQLite for tests ─────────────────────────────────────────────────
+# We use a file-based SQLite (not :memory:) so that the engine created inside
+# app/database/session.py (at module-import time) and our test engine both see
+# the same data.  We monkeypatch DATABASE_URL before importing the app.
 
-TEST_DB_URL = "sqlite:///:memory:"
+import os
 
-engine = create_engine(
-    TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-)
+# Point the app at a temp file DB for the duration of this test module
+_tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+_tmp_db.close()
+TEST_DB_URL = f"sqlite:///{_tmp_db.name}"
+
+# Override DATABASE_URL *before* importing the app so session.py picks it up
+os.environ["DATABASE_URL"] = TEST_DB_URL
+
+from app.database.base import Base       # noqa: E402
+from app.database.session import get_db  # noqa: E402
+import app.models                        # noqa: E402, F401 — register models
+
+from app.main import app                 # noqa: E402
+
+engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -46,17 +44,26 @@ def override_get_db():
         db.close()
 
 
+app.dependency_overrides[get_db] = override_get_db
+
+
 @pytest.fixture(autouse=True)
 def setup_db():
-    """Create tables before each test, drop after."""
+    """Create all tables before each test, drop after."""
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
 
 
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture
+def client():
+    """Return a TestClient with lifespan disabled (tables already exist)."""
+    with TestClient(app) as c:
+        yield c
 
-client = TestClient(app)
+
+# Module-level client for class-based tests that don't use the fixture
+_client = TestClient(app)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,7 +89,7 @@ def _make_wav_bytes(duration_s: float = 2.0, sample_rate: int = 16000) -> bytes:
 def _upload_wav(filename: str = "test.wav", duration_s: float = 2.0) -> dict:
     """Helper: POST a WAV file to /api/v1/analyze/recording."""
     wav_bytes = _make_wav_bytes(duration_s)
-    response = client.post(
+    response = _client.post(
         "/api/v1/analyze/recording",
         files={"file": (filename, wav_bytes, "audio/wav")},
     )
@@ -126,7 +133,8 @@ class TestAudioPreprocessor:
         snr = estimate_snr(wav_path)
         # For a pure sine wave, SNR should be measurably positive
         # -1.0 is the error sentinel
-        assert snr != 0 or snr == -1.0  # just ensure it doesn't crash
+        # snr >= -1.0: -1.0 is the error sentinel, any float >= 0 is a valid reading
+        assert snr >= -1.0  # just ensure it doesn't crash and returns a number
 
     def test_estimate_snr_empty_file(self, tmp_path):
         from app.audio.preprocessor import estimate_snr
@@ -245,14 +253,14 @@ class TestUploadEndpoint:
         assert data["status"] == "queued"
 
     def test_upload_invalid_extension_returns_400(self):
-        response = client.post(
+        response = _client.post(
             "/api/v1/analyze/recording",
             files={"file": ("audio.xyz", b"garbage data", "application/octet-stream")},
         )
         assert response.status_code == 400
 
     def test_upload_empty_file_returns_400(self):
-        response = client.post(
+        response = _client.post(
             "/api/v1/analyze/recording",
             files={"file": ("empty.wav", b"", "audio/wav")},
         )
@@ -260,7 +268,7 @@ class TestUploadEndpoint:
 
     def test_legacy_calls_endpoint_also_works(self):
         wav_bytes = _make_wav_bytes()
-        response = client.post(
+        response = _client.post(
             "/api/v1/calls",
             files={"file": ("test.wav", wav_bytes, "audio/wav")},
         )
@@ -281,20 +289,20 @@ class TestStatusEndpoint:
         upload = _upload_wav()
         call_id = upload.json()["call_id"]
 
-        status_response = client.get(f"/api/v1/call/{call_id}/status")
+        status_response = _client.get(f"/api/v1/call/{call_id}/status")
         assert status_response.status_code == 200
         data = status_response.json()
         assert data["call_id"] == call_id
         assert data["status"] in ("queued", "processing", "completed", "failed")
 
     def test_status_not_found_returns_404(self):
-        response = client.get("/api/v1/call/nonexistent-id/status")
+        response = _client.get("/api/v1/call/nonexistent-id/status")
         assert response.status_code == 404
 
     def test_legacy_status_path_works(self):
         upload = _upload_wav()
         call_id = upload.json()["call_id"]
-        response = client.get(f"/api/v1/calls/{call_id}/status")
+        response = _client.get(f"/api/v1/calls/{call_id}/status")
         assert response.status_code == 200
 
 
@@ -310,19 +318,19 @@ class TestCallStateEndpoint:
         from app.models.call import CallRecord
         call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
         if call and call.status in ("queued", "processing"):
-            response = client.get(f"/api/v1/call/{call_id}/state")
+            response = _client.get(f"/api/v1/call/{call_id}/state")
             assert response.status_code == 425
         db.close()
 
     def test_state_not_found_returns_404(self):
-        response = client.get("/api/v1/call/does-not-exist/state")
+        response = _client.get("/api/v1/call/does-not-exist/state")
         assert response.status_code == 404
 
 
 class TestCallsListEndpoint:
 
     def test_empty_list(self):
-        response = client.get("/api/v1/calls")
+        response = _client.get("/api/v1/calls")
         assert response.status_code == 200
         data = response.json()
         assert "calls" in data
@@ -331,20 +339,20 @@ class TestCallsListEndpoint:
     def test_list_after_upload(self):
         _upload_wav()
         _upload_wav()
-        response = client.get("/api/v1/calls")
+        response = _client.get("/api/v1/calls")
         assert response.status_code == 200
         data = response.json()
         assert data["pagination"]["total"] >= 2
 
     def test_pagination_params(self):
-        response = client.get("/api/v1/calls?page=1&page_size=5")
+        response = _client.get("/api/v1/calls?page=1&page_size=5")
         assert response.status_code == 200
 
 
 class TestContactsEndpoint:
 
     def test_create_contact(self):
-        response = client.post(
+        response = _client.post(
             "/api/v1/contacts",
             params={
                 "name": "Mom",
@@ -361,15 +369,15 @@ class TestContactsEndpoint:
 
     def test_list_contacts(self):
         # Create one first
-        client.post("/api/v1/contacts", params={"name": "Dad", "relation": "father"})
-        response = client.get("/api/v1/contacts")
+        _client.post("/api/v1/contacts", params={"name": "Dad", "relation": "father"})
+        response = _client.get("/api/v1/contacts")
         assert response.status_code == 200
         contacts = response.json()
         assert isinstance(contacts, list)
         assert len(contacts) >= 1
 
     def test_contact_voiceprint_not_found(self):
-        response = client.post(
+        response = _client.post(
             "/api/v1/contacts/nonexistent-id/voiceprint",
             files={"file": ("enroll.wav", _make_wav_bytes(), "audio/wav")},
         )
@@ -377,10 +385,10 @@ class TestContactsEndpoint:
 
     def test_contact_voiceprint_empty_audio_rejected(self):
         # Create contact first
-        create = client.post("/api/v1/contacts", params={"name": "Sister", "relation": "sister"})
+        create = _client.post("/api/v1/contacts", params={"name": "Sister", "relation": "sister"})
         contact_id = create.json()["contact_id"]
 
-        response = client.post(
+        response = _client.post(
             f"/api/v1/contacts/{contact_id}/voiceprint",
             files={"file": ("empty.wav", b"", "audio/wav")},
         )
@@ -388,10 +396,10 @@ class TestContactsEndpoint:
 
     def test_contact_voiceprint_enroll_returns_status(self):
         """Enrollment should return a dict with 'enrolled' key."""
-        create = client.post("/api/v1/contacts", params={"name": "Brother", "relation": "sibling"})
+        create = _client.post("/api/v1/contacts", params={"name": "Brother", "relation": "sibling"})
         contact_id = create.json()["contact_id"]
 
-        response = client.post(
+        response = _client.post(
             f"/api/v1/contacts/{contact_id}/voiceprint",
             files={"file": ("enroll.wav", _make_wav_bytes(5.0), "audio/wav")},
         )
@@ -405,7 +413,7 @@ class TestContactsEndpoint:
 class TestCounterfactualEndpoint:
 
     def test_counterfactual_not_found(self):
-        response = client.get("/api/v1/call/nonexistent/counterfactual")
+        response = _client.get("/api/v1/call/nonexistent/counterfactual")
         assert response.status_code == 404
 
 
@@ -421,6 +429,8 @@ class TestRealAnalysisService:
         from app.models.call import CallRecord
         from app.services.real_analysis_service import real_analysis_service
 
+        # Create tables for this sub-test (autouse fixture already did it,
+        # but we need the session to point at the same in-memory engine)
         db = TestingSessionLocal()
         call = CallRecord(
             original_filename="ghost.wav",

@@ -1,3 +1,4 @@
+# ── Core API ──────────────────────────────────────────────────────────────────
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 pydantic==2.5.3
@@ -5,6 +6,22 @@ pydantic-settings==2.1.0
 sqlalchemy==2.0.25
 python-multipart==0.0.6
 python-dotenv==1.0.0
+
+# ── Testing ───────────────────────────────────────────────────────────────────
 pytest==7.4.4
 pytest-asyncio==0.23.3
 httpx==0.26.0
+
+# ── Audio (M2) ────────────────────────────────────────────────────────────────
+# ffmpeg must be installed as a system package separately
+numpy>=1.24.0
+faster-whisper>=0.10.0
+
+# ── Voice Layer — optional heavy deps (uncomment when ready) ──────────────────
+# torch>=2.0.0
+# transformers>=4.35.0
+# torchaudio>=2.0.0
+# speechbrain>=0.5.16
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+aiofiles>=23.0.0

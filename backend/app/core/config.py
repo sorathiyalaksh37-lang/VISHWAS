@@ -32,9 +32,19 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8501,http://localhost:3000"
     
     # Analysis
-    analysis_mode: str = "mock"
+    analysis_mode: str = "mock"           # "real" | "mock"
     mock_processing_delay_seconds: int = 2
-    
+
+    # ASR — faster-whisper
+    whisper_model_size: str = "base"      # base | small | medium
+    whisper_device: str = "cpu"           # cpu | cuda
+    whisper_compute_type: str = "int8"    # int8 | float16
+
+    # Voice layer
+    enable_voice_layer: bool = True
+    voice_min_duration_s: float = 3.0
+    voice_min_snr_db: float = 5.0
+
     # Logging
     log_level: str = "INFO"
     
