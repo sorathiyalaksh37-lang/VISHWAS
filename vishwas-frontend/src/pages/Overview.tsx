@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
@@ -7,13 +8,12 @@ import {
   PhoneCallIcon,
   ShieldCheckIcon,
   UsersIcon,
+  WifiIcon,
+  WifiOffIcon,
 } from 'lucide-react'
 import { SummaryCard } from '../components/overview/SummaryCard'
 import { TrustGraphPreview } from '../components/overview/TrustGraphPreview'
-import {
-  DEMO_ACTIVITY,
-  DEMO_METRICS,
-} from '../data/sampleData'
+import { apiClient, type CallListItem } from '../services/api'
 import type { NavItem } from '../components/layout/Sidebar'
 
 interface OverviewProps {
@@ -28,22 +28,84 @@ const CARD_CONFIG = [
 ]
 
 const RISK_BADGE: Record<string, string> = {
-  low:    'badge--low',
-  medium: 'badge--medium',
-  high:   'badge--high',
+  completed:   'badge--low',
+  processing:  'badge--medium',
+  queued:      'badge--medium',
+  failed:      'badge--high',
 }
 
-const RISK_LABEL: Record<string, string> = {
-  low:    'Low risk',
-  medium: 'Medium risk',
-  high:   'High risk',
+const STATUS_LABEL: Record<string, string> = {
+  completed:  'Completed',
+  processing: 'Processing',
+  queued:     'Queued',
+  failed:     'Failed',
 }
 
 /**
- * Overview page — redesigned dashboard.
- * All metrics, contacts, and activity entries are illustrative demo data only.
+ * Overview page — live dashboard.
+ * Fetches real stats from the backend API and falls back to
+ * empty states when the backend is unavailable.
  */
 export function Overview({ onNavigate }: OverviewProps) {
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
+  const [calls, setCalls] = useState<CallListItem[]>([])
+  const [totalCalls, setTotalCalls] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true)
+
+      // Check backend health
+      const health = await apiClient.checkHealth()
+      setBackendOnline(health !== null)
+
+      // Load call history
+      const response = await apiClient.listCalls(1, 10)
+      if (response) {
+        setCalls(response.calls)
+        setTotalCalls(response.pagination.total)
+      }
+
+      setLoading(false)
+    }
+
+    loadData()
+  }, [])
+
+  // Compute metrics from real data
+  const completedCount = calls.filter(c => c.status === 'completed').length
+  const failedCount = calls.filter(c => c.status === 'failed').length
+  const processingCount = calls.filter(c => c.status === 'processing' || c.status === 'queued').length
+
+  const metrics = [
+    { label: 'Total Analyses', value: String(totalCalls) },
+    { label: 'Completed', value: String(completedCount) },
+    { label: 'Failed / Errors', value: String(failedCount) },
+    { label: 'In Progress', value: String(processingCount) },
+  ]
+
+  function formatDate(dateString: string): string {
+    try {
+      const date = new Date(dateString)
+      const now = new Date()
+      const diffMs = now.getTime() - date.getTime()
+      const diffMins = Math.floor(diffMs / 60000)
+      const diffHours = Math.floor(diffMs / 3600000)
+
+      if (diffMins < 1) return 'Just now'
+      if (diffMins < 60) return `${diffMins} min ago`
+      if (diffHours < 24) return `${diffHours}h ago`
+
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+    } catch {
+      return dateString
+    }
+  }
+
   return (
     <div className="overview-page">
       {/* Page heading */}
@@ -54,13 +116,34 @@ export function Overview({ onNavigate }: OverviewProps) {
         </p>
       </div>
 
+      {/* Backend connection indicator */}
+      <div
+        className={`backend-indicator ${
+          backendOnline === null
+            ? ''
+            : backendOnline
+            ? 'backend-indicator--ok'
+            : 'backend-indicator--error'
+        }`}
+        role="status"
+        aria-live="polite"
+      >
+        {backendOnline === null ? (
+          <><ClockIcon size={13} aria-hidden="true" /> <span>Checking backend...</span></>
+        ) : backendOnline ? (
+          <><WifiIcon size={13} aria-hidden="true" /> <span>Backend connected</span></>
+        ) : (
+          <><WifiOffIcon size={13} aria-hidden="true" /> <span>Backend unreachable — showing cached data</span></>
+        )}
+      </div>
+
       {/* ── A. Summary cards ─────────────────────────────────────── */}
       <div className="summary-cards" role="list" aria-label="Dashboard summary">
-        {DEMO_METRICS.map((metric, i) => (
+        {metrics.map((metric, i) => (
           <SummaryCard
             key={metric.label}
             label={metric.label}
-            value={metric.value}
+            value={loading ? '—' : metric.value}
             icon={CARD_CONFIG[i].icon}
             variant={CARD_CONFIG[i].variant}
           />
@@ -95,33 +178,43 @@ export function Overview({ onNavigate }: OverviewProps) {
         </div>
       </section>
 
-      {/* ── C. Recent Activity ───────────────────────────────────── */}
+      {/* ── C. Recent Activity (live) ────────────────────────────── */}
       <section className="overview-section" aria-labelledby="recent-activity-heading">
         <div className="overview-section__header">
           <h2 id="recent-activity-heading" className="section-title">
             Recent Activity
           </h2>
-          <span className="demo-badge">DEMO DATA</span>
+          {backendOnline && <span className="demo-badge demo-badge--live">LIVE</span>}
         </div>
 
-        <div className="activity-notice" role="note">
-          Illustrative demo data — not real call records.
-        </div>
+        {loading && (
+          <div className="activity-notice" role="note">
+            Loading recent activity...
+          </div>
+        )}
 
-        <div className="activity-list" role="list">
-          {DEMO_ACTIVITY.map((entry) => (
-            <div key={entry.id} className="activity-item" role="listitem">
-              <div className="activity-item__contact">{entry.contact}</div>
-              <div className="activity-item__status">{entry.trustStatus}</div>
-              <div className="activity-item__meta">
-                <span className={`risk-badge ${RISK_BADGE[entry.riskLevel]}`}>
-                  {RISK_LABEL[entry.riskLevel]}
-                </span>
-                <span className="activity-item__time">{entry.time}</span>
+        {!loading && calls.length === 0 && (
+          <div className="activity-notice" role="note">
+            No analyses yet. Upload a recording to get started.
+          </div>
+        )}
+
+        {!loading && calls.length > 0 && (
+          <div className="activity-list" role="list">
+            {calls.slice(0, 5).map((entry) => (
+              <div key={entry.call_id} className="activity-item" role="listitem">
+                <div className="activity-item__contact">{entry.original_filename}</div>
+                <div className="activity-item__status">{entry.call_id.slice(0, 8)}...</div>
+                <div className="activity-item__meta">
+                  <span className={`risk-badge ${RISK_BADGE[entry.status] ?? ''}`}>
+                    {STATUS_LABEL[entry.status] ?? entry.status}
+                  </span>
+                  <span className="activity-item__time">{formatDate(entry.created_at)}</span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ── D. Quick Actions ────────────────────────────────────── */}

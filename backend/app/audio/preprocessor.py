@@ -200,7 +200,7 @@ def convert_to_wav(input_path: Path, output_path: Optional[Path] = None) -> Path
 def get_audio_duration(wav_path: Path) -> float:
     """
     Return duration of an audio file in seconds.
-    Tries ffprobe first, falls back to PyAV.
+    Tries ffprobe first, falls back to PyAV, then wave module.
     """
     # Try ffprobe
     try:
@@ -222,7 +222,22 @@ def get_audio_duration(wav_path: Path) -> float:
 
     # Fallback: PyAV
     if AV_AVAILABLE:
-        return _get_duration_with_av(wav_path)
+        duration = _get_duration_with_av(wav_path)
+        if duration > 0:
+            return duration
+
+    # Fallback: wave module for WAV files
+    if wav_path.suffix.lower() == '.wav':
+        try:
+            import wave
+            with wave.open(str(wav_path), 'rb') as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                if rate > 0:
+                    duration = frames / float(rate)
+                    return duration
+        except Exception as e:
+            logger.debug(f"Could not get duration via wave module: {e}")
 
     return 0.0
 
@@ -231,7 +246,7 @@ def estimate_snr(wav_path: Path) -> float:
     """
     Estimate signal-to-noise ratio of a WAV file (dB).
     Uses a simple energy-based approximation.
-    Returns -1.0 if estimation fails.
+    Returns 0.0 if estimation fails (not -1.0, to avoid confusion with low SNR).
     """
     try:
         import numpy as np
@@ -243,7 +258,7 @@ def estimate_snr(wav_path: Path) -> float:
             samples = np.frombuffer(frames, dtype=dtype).astype(np.float32)
 
         if samples.size == 0:
-            return -1.0
+            return 0.0
 
         # Split into 50ms frames
         frame_size = int(TARGET_SAMPLE_RATE * 0.05)
@@ -253,7 +268,7 @@ def estimate_snr(wav_path: Path) -> float:
         ]
         energies = [np.mean(f ** 2) for f in frames_arr if len(f) == frame_size]
         if not energies:
-            return -1.0
+            return 0.0
 
         energies_arr = np.array(energies)
         signal_energy = np.percentile(energies_arr, 90)
@@ -266,7 +281,7 @@ def estimate_snr(wav_path: Path) -> float:
         return float(snr)
     except Exception as e:
         logger.debug(f"SNR estimation failed: {e}")
-        return -1.0
+        return 0.0
 
 
 def validate_audio(wav_path: Path) -> Tuple[bool, str]:

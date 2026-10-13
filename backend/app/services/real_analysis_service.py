@@ -148,8 +148,41 @@ class RealAnalysisService:
             recommended_actions = []
             warnings = []
             agent_findings = []
+            category_scores_dict = None
+            fired_rules_list = []
+            verification_dict = None
+            killchain_stage = None
+            voice_dict = None
 
-            # Try Trust Engine
+            # ── Step 6a: Voice layer (anti-spoof) ────────────────────────────
+            try:
+                if settings.enable_voice_layer:
+                    from app.audio.voice_layer import get_voice_layer
+                    from dataclasses import asdict
+                    voice_layer = get_voice_layer()
+                    voice_result = voice_layer.analyze(wav_path)
+
+                    if voice_result:
+                        # Convert dataclass to dict
+                        voice_dict = asdict(voice_result)
+                        logger.info(
+                            f"[{call_id}] Voice layer: status={voice_result.status}, "
+                            f"spoof_prob={voice_result.spoof_prob}"
+                        )
+                    else:
+                        voice_dict = {"status": "unavailable"}
+                        warnings.append("Voice layer returned no result")
+                else:
+                    voice_dict = {"status": "unavailable"}
+            except Exception as ve:
+                logger.warning(
+                    f"[{call_id}] Voice layer failed (continuing safely): {ve}",
+                    exc_info=True,
+                )
+                voice_dict = {"status": "unavailable"}
+                warnings.append(f"Voice analysis unavailable: {str(ve)[:100]}")
+
+            # ── Step 6b: Trust Engine assessment ─────────────────────────────
             try:
                 from app.trust_engine.trust_graph import TrustGraph
                 from app.trust_engine.judge import TrustJudge
@@ -195,8 +228,20 @@ class RealAnalysisService:
                 risk_score = assessment.score
                 risk_level = assessment.risk_level
                 reasons = assessment.reasons
-                warnings = assessment.warnings
+                warnings.extend(assessment.warnings)
+                fired_rules_list = assessment.fired_rules
+                killchain_stage = assessment.killchain_stage
+
+                # Category scores
+                category_scores_dict = assessment.category_scores
+
+                # Verification
                 if assessment.verification_details:
+                    verification_dict = {
+                        "action": assessment.verification_details.get("action"),
+                        "target": assessment.verification_details.get("recommendation"),
+                        "safe_word_prompt": None,
+                    }
                     action = assessment.verification_details.get("action", "")
                     rec = assessment.verification_details.get("recommendation", "")
                     if action:
@@ -205,7 +250,6 @@ class RealAnalysisService:
                         recommended_actions.append(rec)
 
                 # Convert evidence to agent_findings for the report
-                # Extract from claims, requests, and behavior evidence
                 if hasattr(evidence, 'claims') and evidence.claims:
                     for claim in evidence.claims.claims:
                         agent_findings.append({
@@ -265,11 +309,20 @@ class RealAnalysisService:
             # Add ASR warnings
             if asr_result.transcription_status == "failed":
                 warnings.append("ASR transcription failed — transcript unavailable.")
+                # Treat failed ASR as uncertainty, not evidence of innocence
+                if risk_score < 25:
+                    risk_score = 25
+                    risk_level = "medium"
+                    warnings.append("Risk elevated to MEDIUM due to ASR failure — cannot assess transcript content.")
             elif asr_result.transcription_status == "unavailable":
                 warnings.append(
                     "faster-whisper not installed — transcript unavailable. "
                     "Install with: pip install faster-whisper"
                 )
+                if risk_score < 25:
+                    risk_score = 25
+                    risk_level = "medium"
+                    warnings.append("Risk elevated to MEDIUM — ASR unavailable, transcript content unknown.")
             
             if not recommended_actions:
                 recommended_actions = self._get_default_actions(risk_level)
@@ -294,6 +347,17 @@ class RealAnalysisService:
             )
             report.warnings_json = json.dumps(warnings, ensure_ascii=False)
             report.analysis_mode = self.analysis_mode
+
+            # v3 Trust Engine fields
+            if category_scores_dict:
+                report.category_scores_json = json.dumps(category_scores_dict, ensure_ascii=False)
+            if fired_rules_list:
+                report.fired_rules_json = json.dumps(fired_rules_list, ensure_ascii=False)
+            if verification_dict:
+                report.verification_json = json.dumps(verification_dict, ensure_ascii=False)
+            report.killchain_stage = killchain_stage
+            if voice_dict:
+                report.voice_json = json.dumps(voice_dict, ensure_ascii=False)
 
             # ── Step 8: Mark completed ────────────────────────────────────────
             call.status = "completed"

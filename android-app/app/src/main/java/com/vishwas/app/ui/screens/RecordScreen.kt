@@ -68,7 +68,16 @@ fun RecordScreen(
     LaunchedEffect(uiState.uploadProgress) {
         val progress = uiState.uploadProgress
         if (progress != null && progress.status == ProcessingStatus.COMPLETED) {
-            onNavigateToResults(progress.callId)
+            val id = progress.callId
+            viewModel.clearUploadProgress()
+            onNavigateToResults(id)
+        }
+    }
+
+    // If upload/analysis fails, drop back to RECORDED so the user can retry
+    LaunchedEffect(uiState.errorMessage) {
+        if (uiState.errorMessage != null && recordState == RecordState.UPLOADING) {
+            recordState = RecordState.RECORDED
         }
     }
 

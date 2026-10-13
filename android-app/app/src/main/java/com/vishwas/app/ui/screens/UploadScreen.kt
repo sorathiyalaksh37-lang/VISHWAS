@@ -39,7 +39,9 @@ fun UploadScreen(
     LaunchedEffect(uiState.uploadProgress) {
         val progress = uiState.uploadProgress
         if (progress != null && progress.status == ProcessingStatus.COMPLETED) {
-            onNavigateToResults(progress.callId)
+            val id = progress.callId
+            viewModel.clearUploadProgress()
+            onNavigateToResults(id)
         }
     }
     

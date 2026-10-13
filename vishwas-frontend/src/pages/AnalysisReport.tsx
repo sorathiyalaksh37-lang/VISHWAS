@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   AlertTriangleIcon,
+  CheckCircleIcon,
   ClockIcon,
   FileAudioIcon,
   FileTextIcon,
@@ -9,6 +10,8 @@ import {
   ShieldIcon,
   ShieldOffIcon,
   UserSearchIcon,
+  XCircleIcon,
+  ZapIcon,
 } from 'lucide-react'
 import { apiClient, type AnalysisReportResponse } from '../services/api'
 
@@ -16,9 +19,9 @@ import { apiClient, type AnalysisReportResponse } from '../services/api'
  * Analysis Report page.
  *
  * Presents the structured report populated with real backend results.
- * All sections dynamically render data from the API response.
- *
- * This page is shown when the user navigates to a specific call's report.
+ * All sections dynamically render data from the API response including
+ * v3 Trust Engine fields: category scores, fired rules, verification,
+ * voice evidence, and killchain stage.
  */
 
 interface ReportSectionProps {
@@ -107,6 +110,33 @@ export function AnalysisReport({
     return signal
       .replace(/_/g, ' ')
       .replace(/\b\w/g, c => c.toUpperCase())
+  }
+
+  /** Get risk badge CSS class from level string. */
+  function riskLevelClass(level: string): string {
+    switch (level.toUpperCase()) {
+      case 'CRITICAL': return 'report-risk-badge--critical'
+      case 'HIGH': return 'report-risk-badge--high'
+      case 'MEDIUM': return 'report-risk-badge--medium'
+      case 'LOW': return 'report-risk-badge--low'
+      default: return ''
+    }
+  }
+
+  /** Category score bar. */
+  function CategoryBar({ label, value, max }: { label: string; value: number | null | undefined; max: number }) {
+    const v = value ?? 0
+    const pct = Math.min(100, (v / max) * 100)
+    const color = v === 0 ? 'var(--color-surface-alt)' : v >= max * 0.8 ? 'var(--color-critical)' : v >= max * 0.5 ? 'var(--color-warn)' : 'var(--color-accent)'
+    return (
+      <div className="category-bar">
+        <div className="category-bar__label">{label}</div>
+        <div className="category-bar__track">
+          <div className="category-bar__fill" style={{ width: `${pct}%`, backgroundColor: color }} />
+        </div>
+        <div className="category-bar__value">{v}/{max}</div>
+      </div>
+    )
   }
 
   return (
@@ -198,36 +228,76 @@ export function AnalysisReport({
                 : <PendingBlock label="Available after analysis" />}
             </dd>
           </div>
+          {report?.killchain_stage && (
+            <div className="report-dl__row">
+              <dt>Kill-chain stage</dt>
+              <dd>
+                <span className="report-status-badge report-status-badge--killchain">
+                  {report.killchain_stage}
+                </span>
+              </dd>
+            </div>
+          )}
         </dl>
       </ReportSection>
 
-      {/* 2. Analysis status */}
+      {/* 2. Risk Assessment — primary score + category breakdown */}
       <ReportSection
-        icon={<ClockIcon size={16} strokeWidth={1.75} />}
-        title="Analysis Status"
-        id="report-status"
+        icon={<ShieldIcon size={16} strokeWidth={1.75} />}
+        title="Risk Assessment"
+        id="report-risk"
       >
         {report ? (
           <>
-            <div className="report-status-badge report-status-badge--completed">
-              <ShieldIcon size={14} aria-hidden="true" />
-              <span>{report.status.charAt(0).toUpperCase() + report.status.slice(1)}</span>
+            <div className="report-risk-result">
+              <div className={`report-risk-badge ${riskLevelClass(report.level)}`}>
+                {report.level.toUpperCase()}
+              </div>
+              <p className="report-risk-score">
+                Score: <strong>{report.score}</strong>/100
+              </p>
             </div>
-            <p className="report-caption">
-              Analysis mode: {report.analysis_mode} | Risk Score: {report.score}/100
-            </p>
+
+            {/* Category score bars */}
+            {report.category_scores && (
+              <div className="category-bars" aria-label="Category score breakdown">
+                <CategoryBar label="Identity" value={report.category_scores.identity} max={25} />
+                <CategoryBar label="Requests" value={report.category_scores.request} max={30} />
+                <CategoryBar label="Behavior" value={report.category_scores.behavior} max={20} />
+                <CategoryBar label="Channel" value={report.category_scores.channel} max={15} />
+                <CategoryBar label="Voice" value={report.category_scores.voice} max={10} />
+              </div>
+            )}
+
+            {/* Fired rules */}
+            {report.fired_rules && report.fired_rules.length > 0 && (
+              <div className="fired-rules">
+                <h3 className="report-subsection-title">Triggered Rules</h3>
+                <div className="fired-rules__list">
+                  {report.fired_rules.map((rule, idx) => (
+                    <span key={idx} className="fired-rule-chip">
+                      <ZapIcon size={10} aria-hidden="true" />
+                      {rule}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : (
-          <>
-            <div className="report-status-badge report-status-badge--pending">
-              <ClockIcon size={14} aria-hidden="true" />
-              <span>Awaiting backend connection</span>
-            </div>
-            <p className="report-caption">
-              Analysis will be initiated once the backend service is available. The status will update
-              automatically when results are received.
+          <div className="report-risk-placeholder">
+            <ShieldOffIcon
+              size={32}
+              strokeWidth={1.25}
+              className="report-risk-placeholder__icon"
+              aria-hidden="true"
+            />
+            <p className="report-risk-placeholder__label">Risk level not determined</p>
+            <p className="report-risk-placeholder__body">
+              A risk assessment requires a completed backend analysis. No score has been
+              generated and no risk level has been assigned.
             </p>
-          </>
+          </div>
         )}
       </ReportSection>
 
@@ -237,27 +307,80 @@ export function AnalysisReport({
         title="Voice-Authenticity Findings"
         id="report-voice-auth"
       >
-        {report?.agent_findings && report.agent_findings.length > 0 ? (
-          <>
+        {/* Voice layer status */}
+        {report?.voice ? (
+          <div className="voice-evidence">
             <dl className="report-dl">
-              {report.agent_findings.map((finding, idx) => (
-                <div key={idx} className="report-dl__row">
-                  <dt>{formatSignal(finding.signal)}</dt>
-                  <dd>
-                    <span className={`report-finding-badge ${severityToBadgeClass(finding.severity)}`}>
-                      {finding.severity}
-                    </span>
-                    {' '}
-                    {finding.evidence_text}
-                    {finding.confidence != null && finding.confidence > 0 && (
-                      <span className="report-caption"> (confidence: {(finding.confidence * 100).toFixed(0)}%)</span>
+              <div className="report-dl__row">
+                <dt>Status</dt>
+                <dd>
+                  <span className={`report-status-badge report-status-badge--${
+                    report.voice.status === 'ok' ? 'completed' : 'pending'
+                  }`}>
+                    {report.voice.status === 'ok' ? (
+                      <><CheckCircleIcon size={12} aria-hidden="true" /> Analysed</>
+                    ) : report.voice.status === 'inconclusive' ? (
+                      <><InfoIcon size={12} aria-hidden="true" /> Inconclusive</>
+                    ) : (
+                      <><XCircleIcon size={12} aria-hidden="true" /> Unavailable</>
                     )}
-                    <span className="report-caption"> — Agent: {finding.agent}</span>
+                  </span>
+                </dd>
+              </div>
+              {report.voice.spoof_prob != null && (
+                <div className="report-dl__row">
+                  <dt>Spoof probability</dt>
+                  <dd>
+                    <strong>{(report.voice.spoof_prob * 100).toFixed(1)}%</strong>
+                    <span className="report-caption">
+                      {report.voice.spoof_prob >= 0.8
+                        ? ' — High risk of synthetic speech'
+                        : report.voice.spoof_prob >= 0.6
+                        ? ' — Moderate risk of synthetic speech'
+                        : ' — Low risk indicators'}
+                    </span>
                   </dd>
                 </div>
-              ))}
+              )}
+              {report.voice.windows_analyzed != null && (
+                <div className="report-dl__row">
+                  <dt>Windows analysed</dt>
+                  <dd>{report.voice.windows_analyzed}</dd>
+                </div>
+              )}
+              {report.voice.model && (
+                <div className="report-dl__row">
+                  <dt>Model</dt>
+                  <dd className="report-caption">{report.voice.model}</dd>
+                </div>
+              )}
             </dl>
-          </>
+            {report.voice.status !== 'ok' && (
+              <p className="report-caption">
+                Voice analysis was not available for this recording. This does not confirm or deny
+                voice authenticity.
+              </p>
+            )}
+          </div>
+        ) : report?.agent_findings && report.agent_findings.length > 0 ? (
+          <dl className="report-dl">
+            {report.agent_findings.map((finding, idx) => (
+              <div key={idx} className="report-dl__row">
+                <dt>{formatSignal(finding.signal)}</dt>
+                <dd>
+                  <span className={`report-finding-badge ${severityToBadgeClass(finding.severity)}`}>
+                    {finding.severity}
+                  </span>
+                  {' '}
+                  {finding.evidence_text}
+                  {finding.confidence != null && finding.confidence > 0 && (
+                    <span className="report-caption"> (confidence: {(finding.confidence * 100).toFixed(0)}%)</span>
+                  )}
+                  <span className="report-caption"> — Agent: {finding.agent}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
         ) : (
           <>
             <PendingBlock label="No voice-authenticity analysis available — backend not connected." />
@@ -293,37 +416,29 @@ export function AnalysisReport({
         )}
       </ReportSection>
 
-      {/* 5. Trust / risk assessment */}
-      <ReportSection
-        icon={<ShieldIcon size={16} strokeWidth={1.75} />}
-        title="Risk Assessment"
-        id="report-risk"
-      >
-        {report ? (
-          <div className="report-risk-result">
-            <div className={`report-risk-badge report-risk-badge--${report.level.toLowerCase()}`}>
-              {report.level.toUpperCase()}
-            </div>
-            <p className="report-caption">
-              Score: {report.score}/100
-            </p>
-          </div>
-        ) : (
-          <div className="report-risk-placeholder">
-            <ShieldOffIcon
-              size={32}
-              strokeWidth={1.25}
-              className="report-risk-placeholder__icon"
-              aria-hidden="true"
-            />
-            <p className="report-risk-placeholder__label">Risk level not determined</p>
-            <p className="report-risk-placeholder__body">
-              A risk assessment requires a completed backend analysis. No score has been
-              generated and no risk level has been assigned.
-            </p>
-          </div>
-        )}
-      </ReportSection>
+      {/* 5. Verification recommendation */}
+      {report?.verification && (
+        <ReportSection
+          icon={<CheckCircleIcon size={16} strokeWidth={1.75} />}
+          title="Verification Recommendation"
+          id="report-verification"
+        >
+          <dl className="report-dl">
+            {report.verification.action && (
+              <div className="report-dl__row">
+                <dt>Action</dt>
+                <dd><strong>{report.verification.action}</strong></dd>
+              </div>
+            )}
+            {report.verification.target && (
+              <div className="report-dl__row">
+                <dt>Recommendation</dt>
+                <dd>{report.verification.target}</dd>
+              </div>
+            )}
+          </dl>
+        </ReportSection>
+      )}
 
       {/* 6. Explanation and recommended actions */}
       <ReportSection
@@ -377,6 +492,7 @@ export function AnalysisReport({
             {report.transcript.segments.map((segment, idx) => (
               <p key={idx} className="report-transcript__segment">
                 <strong>[{segment.speaker ?? 'Speaker'}]</strong> {segment.text}
+                <span className="report-caption"> ({segment.start.toFixed(1)}s–{segment.end.toFixed(1)}s)</span>
               </p>
             ))}
           </div>

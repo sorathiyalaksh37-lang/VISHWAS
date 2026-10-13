@@ -60,6 +60,29 @@ export interface AgentFinding {
   source: string
 }
 
+export interface CategoryScores {
+  identity: number | null
+  request: number | null
+  behavior: number | null
+  channel: number | null
+  voice: number | null
+}
+
+export interface Verification {
+  action: string | null
+  target: string | null
+  safe_word_prompt: boolean | null
+}
+
+export interface VoiceEvidence {
+  status: string | null
+  spoof_prob: number | null
+  windows_analyzed: number | null
+  speaker_match: Record<string, unknown> | null
+  quality: Record<string, unknown> | null
+  model: string | null
+}
+
 export interface AnalysisReportResponse {
   call_id: string
   status: string
@@ -68,11 +91,11 @@ export interface AnalysisReportResponse {
   transcript?: TranscriptResponse | null
   level: string
   score: number
-  category_scores?: Record<string, number | null> | null
+  category_scores?: CategoryScores | null
   fired_rules?: string[]
   killchain_stage?: string | null
-  verification?: Record<string, unknown> | null
-  voice?: Record<string, unknown> | null
+  verification?: Verification | null
+  voice?: VoiceEvidence | null
   counterfactuals?: Array<{ change: string; new_score: number }> | null
   agent_findings: AgentFinding[]
   reasons: string[]

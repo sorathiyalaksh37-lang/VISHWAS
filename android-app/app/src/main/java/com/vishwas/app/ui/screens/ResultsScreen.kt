@@ -13,6 +13,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.vishwas.app.viewmodel.VishwasViewModel
 
+/** Risk-level color mapping — must match Streamlit dashboard exactly. */
+private fun riskColor(level: String): Color = when (level.lowercase()) {
+    "low"      -> Color(0xFF2E7D32) // green
+    "medium"   -> Color(0xFFE65100) // orange
+    "high"     -> Color(0xFFB71C1C) // red
+    "critical" -> Color(0xFF7B0000) // dark red
+    else       -> Color.Gray
+}
+
+private fun riskContainerColor(level: String): Color = when (level.lowercase()) {
+    "low"      -> Color(0xFFE8F5E9)
+    "medium"   -> Color(0xFFFFF3E0)
+    "high"     -> Color(0xFFFFEBEE)
+    "critical" -> Color(0xFFFCE4EC)
+    else       -> Color(0xFFF5F5F5)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultsScreen(
@@ -21,11 +38,12 @@ fun ResultsScreen(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
+    var metadataExpanded by remember { mutableStateOf(false) }
+
     LaunchedEffect(callId) {
         viewModel.loadReport(callId)
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -44,9 +62,7 @@ fun ResultsScreen(
                     .fillMaxSize()
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
+            ) { CircularProgressIndicator() }
         } else {
             val report = uiState.selectedCall
             if (report == null) {
@@ -61,7 +77,7 @@ fun ResultsScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Error,
+                            Icons.Default.Error,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp)
                         )
@@ -69,6 +85,11 @@ fun ResultsScreen(
                     }
                 }
             } else {
+                val level          = report.level
+                val riskLower      = level.lowercase()
+                val primaryColor   = riskColor(level)
+                val containerColor = riskContainerColor(level)
+
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -76,30 +97,8 @@ fun ResultsScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Mock indicator
-                    if (report.isMock) {
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Info, contentDescription = null)
-                                    Text(
-                                        text = "Mock Analysis Mode\n\nThis is demonstration data, not real fraud detection.",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                            }
-                        }
-                    }
 
-                    // Safety warning card for HIGH / CRITICAL results
-                    val riskLower = report.level.lowercase()
+                    // 1. Safety warning — HIGH / CRITICAL only (patch-preserved)
                     if (riskLower == "high" || riskLower == "critical") {
                         item {
                             Card(
@@ -114,124 +113,190 @@ fun ResultsScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
-                                        text = "⚠ Do NOT send money or share OTPs",
+                                        "⚠ Do NOT send money or share OTPs",
                                         style = MaterialTheme.typography.titleMedium,
                                         color = Color(0xFF8A6D00)
                                     )
+                                    Text("• Call back on the number saved in your contacts",
+                                        style = MaterialTheme.typography.bodyMedium)
+                                    Text("• Ask for the family safe word before acting",
+                                        style = MaterialTheme.typography.bodyMedium)
+                                    Text("• Never share a PIN, OTP, or bank password",
+                                        style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Top 3-metric row — RISK LEVEL | LANGUAGE | ANALYSIS MODE
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Risk Level (color-coded)
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors   = CardDefaults.cardColors(containerColor = containerColor)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(12.dp)
+                                        .fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
                                     Text(
-                                        text = "• Call back on the number saved in your contacts",
-                                        style = MaterialTheme.typography.bodyMedium
+                                        text  = level.uppercase(),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = primaryColor
                                     )
                                     Text(
-                                        text = "• Ask for the family safe word before acting",
-                                        style = MaterialTheme.typography.bodyMedium
+                                        text  = "${report.score}/100",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = primaryColor
                                     )
                                     Text(
-                                        text = "• Never share a PIN, OTP, or bank password",
-                                        style = MaterialTheme.typography.bodyMedium
+                                        "RISK LEVEL",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            // Language
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors   = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(12.dp)
+                                        .fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text  = report.language?.uppercase() ?: "N/A",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        "LANGUAGE",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            // Analysis Mode
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors   = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(12.dp)
+                                        .fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text  = report.analysisMode.uppercase(),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "MODE",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
                         }
                     }
 
-                    // Risk level
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = when (report.level.lowercase()) {
-                                    "high", "critical" -> MaterialTheme.colorScheme.errorContainer
-                                    "medium" -> MaterialTheme.colorScheme.tertiaryContainer
-                                    else -> MaterialTheme.colorScheme.primaryContainer
-                                }
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    // 3. v3 evidence cards — kill-chain, scores, verification, voice, rules, counterfactuals
+                    v3EvidenceItems(report)
+
+                    // 4. Warnings (st.warning equivalent)
+                    if (report.warnings.isNotEmpty()) {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFFFF3CD)
+                                )
                             ) {
-                                Text(
-                                    text = "Risk Level: ${report.level} (score: ${report.score}/100)",
-                                    style = MaterialTheme.typography.titleLarge
-                                )
-                                Text(
-                                    text = "Language: ${report.language?.uppercase() ?: "Unknown"}",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text("Warnings:", style = MaterialTheme.typography.titleMedium)
+                                    report.warnings.forEach { w ->
+                                        Text("• $w", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
                             }
                         }
                     }
-                    
-                    // Warnings
-                    if (report.warnings.isNotEmpty()) {
+
+                    // 5. 🎯 Risk Factors
+                    if (report.reasons.isNotEmpty()) {
                         item {
                             Card {
                                 Column(
                                     modifier = Modifier.padding(16.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text("Warnings:", style = MaterialTheme.typography.titleMedium)
-                                    report.warnings.forEach { warning ->
-                                        Text("• $warning", style = MaterialTheme.typography.bodySmall)
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Warning, contentDescription = null)
+                                        Text("🎯 Risk Factors",
+                                            style = MaterialTheme.typography.titleMedium)
+                                    }
+                                    report.reasons.forEach { r ->
+                                        Text("• $r", style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             }
                         }
                     }
-                    
-                    // Risk factors
-                    item {
-                        Card {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+
+                    // 6. ✅ Recommended Actions
+                    if (report.recommendedActions.isNotEmpty()) {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
                             ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(Icons.Default.Warning, contentDescription = null)
-                                    Text("Risk Factors", style = MaterialTheme.typography.titleMedium)
-                                }
-                                report.reasons.forEach { reason ->
-                                    Text("• $reason", style = MaterialTheme.typography.bodyMedium)
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null)
+                                        Text("✅ Recommended Actions",
+                                            style = MaterialTheme.typography.titleMedium)
+                                    }
+                                    report.recommendedActions.forEach { a ->
+                                        Text("• $a", style = MaterialTheme.typography.bodyMedium)
+                                    }
                                 }
                             }
                         }
                     }
-                    
-                    // Recommended actions
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.CheckCircle, contentDescription = null)
-                                    Text("Recommended Actions", style = MaterialTheme.typography.titleMedium)
-                                }
-                                report.recommendedActions.forEach { action ->
-                                    Text("• $action", style = MaterialTheme.typography.bodyMedium)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Agent findings
+
+                    // 7. 🔍 Detection Findings (one card per agent_finding)
                     if (report.agentFindings.isNotEmpty()) {
                         item {
-                            Text(
-                                "Detection Findings",
-                                style = MaterialTheme.typography.titleLarge
-                            )
+                            Text("🔍 Detection Findings",
+                                style = MaterialTheme.typography.titleLarge)
                         }
                         items(report.agentFindings) { finding ->
                             Card {
@@ -239,30 +304,44 @@ fun ResultsScreen(
                                     modifier = Modifier.padding(16.dp),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text  = finding.signal,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            text  = finding.severity.uppercase(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = when (finding.severity.lowercase()) {
+                                                "critical", "high" ->
+                                                    MaterialTheme.colorScheme.error
+                                                else ->
+                                                    MaterialTheme.colorScheme.onSurface
+                                            }
+                                        )
+                                    }
                                     Text(
-                                        text = finding.signal,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Text(
-                                        text = "Severity: ${finding.severity.uppercase()}",
+                                        text  = "Agent: ${finding.agent}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = when (finding.severity.lowercase()) {
-                                            "critical", "high" -> MaterialTheme.colorScheme.error
-                                            else -> MaterialTheme.colorScheme.onSurface
-                                        }
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = "Evidence: ${finding.evidenceText}",
+                                        text  = finding.evidenceText,
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     if (finding.startTime != null) {
                                         Text(
-                                            text = "Time: ${finding.startTime}s - ${finding.endTime}s",
+                                            text  = "${finding.startTime}s – ${finding.endTime}s",
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                     }
+                                    // source as caption
                                     Text(
-                                        text = "Source: ${finding.source}",
+                                        text  = finding.source,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -270,16 +349,13 @@ fun ResultsScreen(
                             }
                         }
                     }
-                    
-                    // Transcript
+
+                    // 8. 📝 Transcript
+                    item {
+                        Text("📝 Transcript", style = MaterialTheme.typography.titleLarge)
+                    }
                     val transcript = report.transcript
                     if (transcript != null && transcript.segments.isNotEmpty()) {
-                        item {
-                            Text(
-                                "Transcript",
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                        }
                         items(transcript.segments) { segment ->
                             Card {
                                 Column(
@@ -287,14 +363,75 @@ fun ResultsScreen(
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        text = "[${segment.start}s - ${segment.end}s]",
+                                        text  = "[${segment.start}s - ${segment.end}s]",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = segment.text,
+                                        text  = segment.text,
                                         style = MaterialTheme.typography.bodyMedium
                                     )
+                                }
+                            }
+                        }
+                    } else {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("No transcript available",
+                                        style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    }
+
+                    // 9. 📊 Metadata — collapsible
+                    item {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("📊 Metadata",
+                                        style = MaterialTheme.typography.titleMedium)
+                                    IconButton(onClick = {
+                                        metadataExpanded = !metadataExpanded
+                                    }) {
+                                        Icon(
+                                            imageVector = if (metadataExpanded)
+                                                Icons.Default.ExpandLess
+                                            else
+                                                Icons.Default.ExpandMore,
+                                            contentDescription = null
+                                        )
+                                    }
+                                }
+                                if (metadataExpanded) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        MetaRow("Call ID",   report.callId)
+                                        MetaRow("Status",    report.status)
+                                        MetaRow("Created",   report.createdAt
+                                            .take(16).replace("T", " "))
+                                        report.completedAt?.let {
+                                            MetaRow("Completed", it.take(16).replace("T", " "))
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -302,5 +439,20 @@ fun ResultsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MetaRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(value, style = MaterialTheme.typography.bodySmall)
     }
 }

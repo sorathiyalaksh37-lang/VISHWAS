@@ -448,6 +448,7 @@ def _build_report_response(call: CallRecord, report: AnalysisReport) -> Analysis
         category_scores_data = json.loads(report.category_scores_json) if report.category_scores_json else None
         fired_rules_data = json.loads(report.fired_rules_json) if report.fired_rules_json else []
         verification_data = json.loads(report.verification_json) if report.verification_json else None
+        voice_data = json.loads(report.voice_json) if report.voice_json else None
 
         transcript = None
         if transcript_data:
@@ -463,10 +464,11 @@ def _build_report_response(call: CallRecord, report: AnalysisReport) -> Analysis
         agent_findings = [AgentFinding(**f) for f in agent_findings_data]
         
         # Import Pydantic models for validation
-        from app.schemas.report import CategoryScores, Verification
+        from app.schemas.report import CategoryScores, Verification, VoiceEvidence
         
         category_scores = CategoryScores(**category_scores_data) if category_scores_data else None
         verification = Verification(**verification_data) if verification_data else None
+        voice = VoiceEvidence(**voice_data) if voice_data else None
 
         return AnalysisReportResponse(
             call_id=call.id,
@@ -481,6 +483,8 @@ def _build_report_response(call: CallRecord, report: AnalysisReport) -> Analysis
             fired_rules=fired_rules_data,
             killchain_stage=report.killchain_stage,
             verification=verification,
+            voice=voice,
+            counterfactuals=[],
             reasons=reasons_data,
             recommended_actions=recommended_actions_data,
             warnings=warnings_data,
