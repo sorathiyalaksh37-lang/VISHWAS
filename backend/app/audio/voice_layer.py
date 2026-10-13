@@ -63,8 +63,22 @@ MIN_SPEECH_SECONDS = 3.0     # require at least 3s of speech
 MIN_SNR_DB = 5.0             # require SNR ≥ 5 dB
 
 # Spoof detection model (HuggingFace, wav2vec2-based deepfake classifier)
-SPOOF_MODEL_ID = "facebook/wav2vec2-base"  # placeholder — swap with validated model
-# e.g. "mo-thecreator/deepfake-audio-detection" or similar
+# ⚠️ CRITICAL: This is a PLACEHOLDER model and NOT validated for spoof detection
+# The base wav2vec2 model has no anti-spoofing head and will return meaningless probabilities
+# 
+# TODO (P0): Replace with a verified anti-spoof model before production:
+# Options to evaluate:
+#   - "motheecreator/deepfake-audio-detection" (if HuggingFace available)
+#   - AASIST-based models (check for pretrained versions)
+#   - Train custom model on ASVspoof dataset
+# 
+# Requirements for replacement:
+#   1. Test on 20+ samples (10 real, 10 synthetic)
+#   2. Verify accuracy >80% on test set
+#   3. Document model provenance and training data
+#   4. Measure false positive rate on legitimate calls
+#
+SPOOF_MODEL_ID = "facebook/wav2vec2-base"  # PLACEHOLDER - DO NOT USE IN PRODUCTION
 
 # SpeechBrain ECAPA-TDNN for voiceprints
 ECAPA_SOURCE = "speechbrain/spkrec-ecapa-voxceleb"

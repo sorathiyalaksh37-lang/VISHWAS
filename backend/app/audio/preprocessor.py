@@ -5,6 +5,7 @@ suitable for faster-whisper and voice analysis models.
 
 Pipeline Plan (§3):
   ffmpeg → 16 kHz mono WAV → validation → 2s chunks (live mode)
+  Fallback: PyAV (av) for conversion if ffmpeg binary is absent.
 """
 import io
 import logging
@@ -23,6 +24,13 @@ SUPPORTED_FORMATS = {".wav", ".mp3", ".m4a", ".ogg", ".flac", ".webm"}
 TARGET_SAMPLE_RATE = 16000
 TARGET_CHANNELS = 1          # mono
 
+# ── Check for PyAV (installed with faster-whisper) ────────────────────────────
+try:
+    import av as _av  # noqa: F401
+    AV_AVAILABLE = True
+except ImportError:
+    AV_AVAILABLE = False
+
 
 def _ffmpeg_available() -> bool:
     """Check whether ffmpeg is on PATH."""
@@ -39,15 +47,88 @@ def _ffmpeg_available() -> bool:
 
 FFMPEG_AVAILABLE = _ffmpeg_available()
 if not FFMPEG_AVAILABLE:
-    logger.warning(
-        "ffmpeg not found on PATH. Audio conversion will be skipped. "
-        "Install ffmpeg for proper audio support."
+    if AV_AVAILABLE:
+        logger.info(
+            "ffmpeg binary not found on PATH — using PyAV library for audio conversion."
+        )
+    else:
+        logger.warning(
+            "ffmpeg not found on PATH and PyAV not installed. "
+            "Audio conversion will be skipped. "
+            "Install ffmpeg or pip install av for proper audio support."
+        )
+
+
+def _convert_with_av(input_path: Path, output_path: Path) -> Path:
+    """
+    Convert audio to 16 kHz mono WAV using PyAV (libav/ffmpeg bindings).
+    This is the fallback when the ffmpeg CLI binary is not on PATH.
+    """
+    import av
+    import numpy as np
+
+    logger.info(f"Converting with PyAV: {input_path.name} → {output_path.name}")
+
+    input_container = av.open(str(input_path))
+    audio_stream = input_container.streams.audio[0]
+
+    # Create output WAV
+    output_container = av.open(str(output_path), mode='w')
+    output_stream = output_container.add_stream('pcm_s16le', rate=TARGET_SAMPLE_RATE)
+    output_stream.layout = 'mono'
+
+    # Create a resampler to convert to 16 kHz mono
+    resampler = av.AudioResampler(
+        format='s16',
+        layout='mono',
+        rate=TARGET_SAMPLE_RATE,
     )
+
+    for frame in input_container.decode(audio=0):
+        # Resample
+        resampled_frames = resampler.resample(frame)
+        for resampled_frame in resampled_frames:
+            for packet in output_stream.encode(resampled_frame):
+                output_container.mux(packet)
+
+    # Flush encoder
+    for packet in output_stream.encode(None):
+        output_container.mux(packet)
+
+    output_container.close()
+    input_container.close()
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        raise ValueError("PyAV produced an empty output file.")
+
+    logger.info(
+        f"PyAV converted '{input_path.name}' → '{output_path.name}' "
+        f"({output_path.stat().st_size} bytes)"
+    )
+    return output_path
+
+
+def _get_duration_with_av(audio_path: Path) -> float:
+    """Get audio duration using PyAV."""
+    try:
+        import av
+        container = av.open(str(audio_path))
+        duration = float(container.duration) / av.time_base if container.duration else 0.0
+        # av.time_base is 1000000 (microseconds)
+        if container.duration:
+            duration = container.duration / 1_000_000.0
+        container.close()
+        return duration
+    except Exception as e:
+        logger.debug(f"Could not get duration via PyAV: {e}")
+        return 0.0
 
 
 def convert_to_wav(input_path: Path, output_path: Optional[Path] = None) -> Path:
     """
-    Convert any supported audio file to 16 kHz mono WAV using ffmpeg.
+    Convert any supported audio file to 16 kHz mono WAV.
+
+    Uses ffmpeg CLI if available, falls back to PyAV library.
 
     Args:
         input_path: Path to source audio file.
@@ -57,7 +138,7 @@ def convert_to_wav(input_path: Path, output_path: Optional[Path] = None) -> Path
         Path to the converted WAV file.
 
     Raises:
-        ValueError: If the file format is unsupported or ffmpeg fails.
+        ValueError: If the file format is unsupported or conversion fails.
     """
     suffix = input_path.suffix.lower()
     if suffix not in SUPPORTED_FORMATS:
@@ -66,50 +147,62 @@ def convert_to_wav(input_path: Path, output_path: Optional[Path] = None) -> Path
             f"Supported: {', '.join(SUPPORTED_FORMATS)}"
         )
 
-    # If already a WAV and ffmpeg not available, pass through
-    if not FFMPEG_AVAILABLE:
-        logger.warning(
-            f"ffmpeg unavailable — returning original file without conversion: {input_path}"
-        )
-        return input_path
-
     if output_path is None:
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         output_path = Path(tmp.name)
         tmp.close()
 
-    cmd = [
-        "ffmpeg",
-        "-y",                          # overwrite output
-        "-i", str(input_path),         # input file
-        "-ar", str(TARGET_SAMPLE_RATE),# 16 kHz
-        "-ac", str(TARGET_CHANNELS),   # mono
-        "-acodec", "pcm_s16le",        # 16-bit PCM
-        str(output_path),
-    ]
+    # Strategy 1: Use ffmpeg CLI
+    if FFMPEG_AVAILABLE:
+        cmd = [
+            "ffmpeg",
+            "-y",                          # overwrite output
+            "-i", str(input_path),         # input file
+            "-ar", str(TARGET_SAMPLE_RATE),# 16 kHz
+            "-ac", str(TARGET_CHANNELS),   # mono
+            "-acodec", "pcm_s16le",        # 16-bit PCM
+            str(output_path),
+        ]
 
-    logger.debug(f"Running ffmpeg: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        logger.debug(f"Running ffmpeg: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
-    if result.returncode != 0:
-        logger.error(f"ffmpeg failed:\n{result.stderr}")
-        raise ValueError(f"Audio conversion failed: {result.stderr[-500:]}")
+        if result.returncode != 0:
+            logger.error(f"ffmpeg failed:\n{result.stderr}")
+            raise ValueError(f"Audio conversion failed: {result.stderr[-500:]}")
 
-    if not output_path.exists() or output_path.stat().st_size == 0:
-        raise ValueError("ffmpeg produced an empty output file.")
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            raise ValueError("ffmpeg produced an empty output file.")
 
-    logger.info(
-        f"Converted '{input_path.name}' → '{output_path.name}' "
-        f"({output_path.stat().st_size} bytes)"
+        logger.info(
+            f"Converted '{input_path.name}' → '{output_path.name}' "
+            f"({output_path.stat().st_size} bytes)"
+        )
+        return output_path
+
+    # Strategy 2: Use PyAV library (fallback)
+    if AV_AVAILABLE:
+        return _convert_with_av(input_path, output_path)
+
+    # Strategy 3: If it's already a WAV, pass through
+    if suffix == ".wav":
+        logger.warning(
+            f"No conversion tool available — returning original WAV: {input_path}"
+        )
+        return input_path
+
+    raise ValueError(
+        f"Cannot convert {suffix} file: neither ffmpeg nor PyAV is available. "
+        f"Install one of: ffmpeg (CLI) or av (pip install av)"
     )
-    return output_path
 
 
 def get_audio_duration(wav_path: Path) -> float:
     """
-    Return duration of a WAV file in seconds using ffprobe.
-    Falls back to 0.0 if ffprobe is unavailable.
+    Return duration of an audio file in seconds.
+    Tries ffprobe first, falls back to PyAV.
     """
+    # Try ffprobe
     try:
         result = subprocess.run(
             [
@@ -126,6 +219,11 @@ def get_audio_duration(wav_path: Path) -> float:
             return float(result.stdout.strip())
     except Exception as e:
         logger.debug(f"Could not get duration via ffprobe: {e}")
+
+    # Fallback: PyAV
+    if AV_AVAILABLE:
+        return _get_duration_with_av(wav_path)
+
     return 0.0
 
 

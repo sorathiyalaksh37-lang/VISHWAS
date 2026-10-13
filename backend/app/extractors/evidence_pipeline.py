@@ -9,6 +9,10 @@ Integration points:
 - Produces EvidenceExtraction for M3's trust engine
 - Preserves voice evidence from M2 without modification
 - Handles streaming and batch processing modes
+
+Privacy:
+- Applies PII masking to all evidence quotes before storage
+- Masked quotes sent to Tier 2 agents (never raw PII to LLM)
 """
 import logging
 from typing import Optional
@@ -24,6 +28,7 @@ from app.schemas.evidence import (
     Tier1DetectionResult,
 )
 from app.extractors.tier1_classifier import Tier1Classifier
+from app.extractors.pii_masker import get_pii_masker
 
 logger = logging.getLogger(__name__)
 
@@ -58,15 +63,21 @@ def extract_evidence_from_transcript(
         logger.warning(f"Empty transcript for call {call_id}")
         return _create_empty_evidence(call_id, voice_evidence)
     
-    # Initialize classifier
+    # Initialize classifier and PII masker
     classifier = Tier1Classifier()
     classifier.reset_session()  # Ensure clean state
+    pii_masker = get_pii_masker()
     
     # Extract evidence by category
     try:
         # Extract identity claims
         claims = classifier.extract_claims(transcript.segments)
         logger.info(f"Extracted {len(claims.claims)} claims")
+        
+        # Mask PII in claim quotes
+        for claim in claims.claims:
+            if claim.quote:
+                claim.quote, _ = pii_masker.mask_text(claim.quote, audit=False)
         
         # Extract sensitive requests
         requests = classifier.extract_requests(transcript.segments)
@@ -75,6 +86,14 @@ def extract_evidence_from_transcript(
             f"{len(requests.credential_requests)} credential requests"
         )
         
+        # Mask PII in request quotes
+        for req in requests.money_requests:
+            if req.quote:
+                req.quote, _ = pii_masker.mask_text(req.quote, audit=False)
+        for req in requests.credential_requests:
+            if req.quote:
+                req.quote, _ = pii_masker.mask_text(req.quote, audit=False)
+        
         # Extract behavioral evidence
         behavior = classifier.extract_behavior(transcript.segments)
         logger.info(
@@ -82,6 +101,11 @@ def extract_evidence_from_transcript(
             f"Secrecy: {behavior.secrecy.detected}, "
             f"Emotional: {behavior.emotional_pressure.detected}"
         )
+        
+        # Mask PII in behavioral quotes
+        behavior.urgency.quotes, _ = pii_masker.mask_segments(behavior.urgency.quotes)
+        behavior.secrecy.quotes, _ = pii_masker.mask_segments(behavior.secrecy.quotes)
+        behavior.emotional_pressure.quotes, _ = pii_masker.mask_segments(behavior.emotional_pressure.quotes)
         
         # Get Tier1 signals for tracking
         tier1_result = classifier.classify(transcript.segments)

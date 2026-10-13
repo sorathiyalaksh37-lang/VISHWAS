@@ -1,57 +1,38 @@
 """
 Real analysis service — replaces mock_analysis_service for production.
 
-Orchestrates the full Member 2 pipeline:
+Orchestrates the full analysis pipeline:
   1. Load file from storage
-  2. Convert to 16 kHz mono WAV (ffmpeg)
+  2. Convert to 16 kHz mono WAV (ffmpeg or PyAV)
   3. Validate audio
-  4. Run ASR (faster-whisper) + Voice Layer in parallel
-  5. Persist transcript + voice evidence to DB
-  6. Update call status
+  4. Run ASR (faster-whisper)
+  5. Run evidence extraction + Trust Engine assessment
+  6. Persist transcript + findings to DB
+  7. Update call status
 
-This service is called by the background task in the API routes.
+This service is called by BackgroundTasks in the API routes.
+The analyze_call method signature matches MockAnalysisService for interchangeability.
 """
-import asyncio
 import json
 import logging
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy.orm import Session
-
 from app.audio.preprocessor import convert_to_wav, validate_audio
 from app.audio.asr_service import get_asr_service, ASRResult
-from app.audio.voice_layer import get_voice_layer, VoiceEvidence
 from app.models.call import CallRecord, AnalysisReport
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Thread pool for CPU-bound tasks (ASR, voice) so they don't block the event loop
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="asr-worker")
-
 
 def _run_asr(wav_path: Path, call_id: str) -> ASRResult:
-    """Run ASR synchronously in the thread pool."""
+    """Run ASR synchronously."""
     asr = get_asr_service(model_size=settings.whisper_model_size)
     return asr.transcribe(wav_path, call_id=call_id, vad_filter=True)
-
-
-def _run_voice(
-    wav_path: Path,
-    claimed_contact: Optional[str] = None,
-    enrolled_embedding=None,
-) -> VoiceEvidence:
-    """Run voice analysis synchronously in the thread pool."""
-    voice = get_voice_layer()
-    return voice.analyze(
-        wav_path,
-        claimed_contact=claimed_contact,
-        enrolled_embedding=enrolled_embedding,
-    )
 
 
 def _asr_result_to_dict(result: ASRResult, call_id: str) -> dict:
@@ -80,71 +61,54 @@ def _asr_result_to_dict(result: ASRResult, call_id: str) -> dict:
     }
 
 
-def _voice_evidence_to_dict(evidence: VoiceEvidence) -> dict:
-    """Serialize VoiceEvidence to the voice JSON contract (§4)."""
-    result = {
-        "status": evidence.status,
-        "spoof_prob": evidence.spoof_prob,
-        "windows_analyzed": evidence.windows_analyzed,
-        "duration_s": evidence.duration_s,
-        "snr_db": evidence.snr_db,
-        "model": evidence.model,
-        "processing_time_s": evidence.processing_time_s,
-        "error": evidence.error,
-        "speaker_match": None,
-    }
-    if evidence.speaker_match:
-        result["speaker_match"] = {
-            "claimed_contact": evidence.speaker_match.claimed_contact,
-            "similarity": evidence.speaker_match.similarity,
-            "enrolled": evidence.speaker_match.enrolled,
-            "threshold": evidence.speaker_match.threshold,
-        }
-    return result
-
-
 class RealAnalysisService:
     """
     Production analysis service.
-    Uses real faster-whisper ASR and optional voice layer.
+    Uses real faster-whisper ASR and evidence extraction pipeline.
 
     Falls back gracefully if models are unavailable.
     """
 
-    async def analyze_call(
-        self,
-        db: Session,
-        call_id: str,
-        claimed_contact: Optional[str] = None,
-        enrolled_embedding=None,
-    ) -> None:
+    def __init__(self):
+        """Initialize real analysis service."""
+        self.analysis_mode = "real"
+
+    def analyze_call(self, call_id: str) -> None:
         """
         Full analysis pipeline for a single call.
         Designed to run as a FastAPI BackgroundTask.
+
+        Signature matches MockAnalysisService.analyze_call() so they
+        are interchangeable via _analysis_service() in the routes.
 
         Steps:
           1. Mark call as 'processing'
           2. Locate stored audio file
           3. Convert to 16 kHz mono WAV
           4. Validate audio quality
-          5. ASR + Voice Layer in parallel
-          6. Persist results
-          7. Mark call as 'completed' or 'failed'
+          5. Run ASR transcription
+          6. Extract evidence + run Trust Engine
+          7. Persist results
+          8. Mark call as 'completed' or 'failed'
         """
-        logger.info(f"[{call_id}] Starting real analysis pipeline")
-        loop = asyncio.get_event_loop()
+        # Create a new database session for the background task
+        from app.database.session import SessionLocal
+        db = SessionLocal()
         wav_path: Optional[Path] = None
 
-        # ── Step 1: Mark as processing ────────────────────────────────────────
-        call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
-        if not call:
-            logger.error(f"[{call_id}] CallRecord not found — aborting")
-            return
-
-        call.status = "processing"
-        db.commit()
-
         try:
+            logger.info(f"[{call_id}] Starting real analysis pipeline")
+
+            # ── Step 1: Mark as processing ────────────────────────────────────
+            call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
+            if not call:
+                logger.error(f"[{call_id}] CallRecord not found — aborting")
+                return
+
+            call.status = "processing"
+            call.analysis_mode = self.analysis_mode
+            db.commit()
+
             # ── Step 2: Locate stored file ────────────────────────────────────
             storage_path = Path(call.storage_reference)
             if not storage_path.exists():
@@ -158,183 +122,159 @@ class RealAnalysisService:
             wav_path = Path(tmp_wav.name)
 
             logger.info(f"[{call_id}] Converting audio: {storage_path} → {wav_path}")
-            wav_path = await loop.run_in_executor(
-                _executor,
-                lambda: convert_to_wav(storage_path, wav_path),
-            )
+            wav_path = convert_to_wav(storage_path, wav_path)
 
             # ── Step 4: Validate ──────────────────────────────────────────────
             is_valid, reason = validate_audio(wav_path)
             if not is_valid:
                 raise ValueError(f"Audio validation failed: {reason}")
 
-            # ── Step 5: ASR + Voice in parallel ──────────────────────────────
-            logger.info(f"[{call_id}] Launching ASR + Voice Layer in parallel")
-
-            asr_future = loop.run_in_executor(
-                _executor,
-                lambda: _run_asr(wav_path, call_id),
-            )
-            voice_future = loop.run_in_executor(
-                _executor,
-                lambda: _run_voice(wav_path, claimed_contact, enrolled_embedding),
-            )
-
-            asr_result, voice_evidence = await asyncio.gather(
-                asr_future, voice_future
-            )
+            # ── Step 5: Run ASR transcription ─────────────────────────────────
+            logger.info(f"[{call_id}] Running ASR transcription...")
+            asr_result = _run_asr(wav_path, call_id)
 
             logger.info(
                 f"[{call_id}] ASR: {asr_result.transcription_status} "
-                f"({len(asr_result.segments)} segs) | "
-                f"Voice: {voice_evidence.status}"
+                f"({len(asr_result.segments)} segments)"
             )
 
-            # ── Step 6: Persist to DB + Trust Engine Assessment ──────────────
+            # ── Step 6: Evidence extraction + Risk assessment ─────────────────
             transcript_dict = _asr_result_to_dict(asr_result, call_id)
-            voice_dict = _voice_evidence_to_dict(voice_evidence)
+            full_text = " ".join(seg.text for seg in asr_result.segments)
 
-            # === Phase 2: Trust Engine Integration ===
-            # Extract evidence and run Trust Judge for deterministic risk assessment
+            risk_score = 0
+            risk_level = "low"
+            reasons = []
+            recommended_actions = []
+            warnings = []
+            agent_findings = []
+
+            # Try Trust Engine
             try:
                 from app.trust_engine.trust_graph import TrustGraph
                 from app.trust_engine.judge import TrustJudge
-                from app.extractors.evidence_pipeline import extract_evidence
-                
+                from app.extractors.evidence_pipeline import extract_evidence_from_transcript
+                from app.schemas.report import TranscriptResponse, TranscriptSegment as SchemaSegment
+
                 logger.info(f"[{call_id}] Running Trust Engine assessment")
-                
-                # Extract evidence from transcript
-                full_text = " ".join(seg.text for seg in asr_result.segments)
-                evidence = extract_evidence(
+
+                # Build TranscriptResponse from ASR result for the evidence pipeline
+                schema_segments = [
+                    SchemaSegment(
+                        start=seg.start,
+                        end=seg.end,
+                        text=seg.text,
+                        language=seg.language,
+                        speaker=seg.speaker,
+                    )
+                    for seg in asr_result.segments
+                ]
+                transcript_response = TranscriptResponse(
                     call_id=call_id,
-                    transcript_text=full_text,
-                    transcript_segments=asr_result.segments,
-                    voice_evidence=voice_evidence
+                    language=asr_result.language,
+                    transcription_status=asr_result.transcription_status,
+                    segments=schema_segments,
+                    is_mock=False,
                 )
-                
-                # Run Trust Judge
+
+                # Extract evidence using the proper pipeline
+                evidence = extract_evidence_from_transcript(
+                    transcript=transcript_response,
+                    call_id=call_id,
+                )
+
                 trust_graph = TrustGraph(db)
                 judge = TrustJudge()
                 assessment = judge.evaluate(
                     call_id=call_id,
                     evidence=evidence,
                     trust_graph=trust_graph,
-                    caller_number=claimed_contact  # TODO: Pass actual caller number
+                    caller_number=None
                 )
-                
-                # Use Trust Judge assessment
+
                 risk_score = assessment.score
                 risk_level = assessment.risk_level
                 reasons = assessment.reasons
-                
-                # Build structured verification object per v3 contract
-                verification_obj = None
-                if assessment.verification_method and assessment.verification_details:
-                    verification_obj = {
-                        "action": assessment.verification_method,  # snake_case method
-                        "target": None,
-                        "safe_word_prompt": False  # Default to False, will implement safe word logic later
-                    }
-                    
-                    # Build target string if contact info available
-                    if trust_context.get("contact_found"):
-                        contact_name = trust_context.get("contact_name")
-                        safe_numbers = trust_context.get("verified_numbers", [])
-                        if contact_name and safe_numbers:
-                            # Format: "Mom (saved: +91-98xxxx)"
-                            masked_number = safe_numbers[0][:7] + "xxxx" if safe_numbers else ""
-                            verification_obj["target"] = f"{contact_name} (saved: {masked_number})"
-                        elif contact_name:
-                            verification_obj["target"] = contact_name
-                    
-                    # Could check if contact has safe_word_hash set
-                    # For now, keep as False until safe word validation is implemented
-                
-                # Backward compat: keep recommended_actions
-                recommended_actions = []
-                if assessment.verification_details:
-                    recommended_actions.append(assessment.verification_details.get("action", ""))
-                    recommended_actions.append(assessment.verification_details.get("recommendation", ""))
-                
                 warnings = assessment.warnings
-                
+                if assessment.verification_details:
+                    action = assessment.verification_details.get("action", "")
+                    rec = assessment.verification_details.get("recommendation", "")
+                    if action:
+                        recommended_actions.append(action)
+                    if rec:
+                        recommended_actions.append(rec)
+
+                # Convert evidence to agent_findings for the report
+                # Extract from claims, requests, and behavior evidence
+                if hasattr(evidence, 'claims') and evidence.claims:
+                    for claim in evidence.claims.claims:
+                        agent_findings.append({
+                            "agent": "tier1_classifier",
+                            "signal": f"identity_claim_{claim.claim_type}" if hasattr(claim, 'claim_type') else "identity_claim",
+                            "severity": "medium",
+                            "evidence_text": getattr(claim, 'quote', str(claim)),
+                            "source": "real"
+                        })
+                if hasattr(evidence, 'requests') and evidence.requests:
+                    for req in evidence.requests.credential_requests:
+                        agent_findings.append({
+                            "agent": "tier1_classifier",
+                            "signal": "sensitive_credential_request",
+                            "severity": "critical",
+                            "evidence_text": getattr(req, 'quote', str(req)),
+                            "source": "real"
+                        })
+                    for req in evidence.requests.money_requests:
+                        agent_findings.append({
+                            "agent": "tier1_classifier",
+                            "signal": "financial_request",
+                            "severity": "critical",
+                            "evidence_text": getattr(req, 'quote', str(req)),
+                            "source": "real"
+                        })
+                if hasattr(evidence, 'behavior') and evidence.behavior:
+                    if evidence.behavior.urgency and evidence.behavior.urgency.detected:
+                        agent_findings.append({
+                            "agent": "tier1_classifier",
+                            "signal": "urgency_tactic",
+                            "severity": "high",
+                            "evidence_text": evidence.behavior.urgency.quote or "Urgency detected",
+                            "source": "real"
+                        })
+
                 logger.info(
-                    f"[{call_id}] Trust Judge: {risk_level} "
-                    f"(score={risk_score}, channel={assessment.channel_status})"
+                    f"[{call_id}] Trust Judge: {risk_level} (score={risk_score})"
                 )
-                
-                # === Phase 3: Tier 2 Agentic AI (Optional) ===
-                # Run Fraud + Skeptic agents if enabled
-                agent_analysis_json = None
-                try:
-                    from app.agents.orchestrator import AgentOrchestrator
-                    from app.core.config import settings
-                    
-                    if settings.tier2_enabled:
-                        logger.info(f"[{call_id}] Running Tier 2 agent analysis")
-                        
-                        orchestrator = AgentOrchestrator()
-                        
-                        # Get score breakdown from judge (need to extract it)
-                        # For now, create a mock breakdown from assessment data
-                        from app.trust_engine.scoring import ScoreBreakdown
-                        score_breakdown = ScoreBreakdown(
-                            identity=assessment.category_scores.get("identity", 0),
-                            request=assessment.category_scores.get("request", 0),
-                            behavior=assessment.category_scores.get("behavior", 0),
-                            channel=assessment.category_scores.get("channel", 0),
-                            voice=assessment.category_scores.get("voice", 0),
-                            total=assessment.score,
-                            final_score=assessment.score,
-                            reasons=assessment.reasons,
-                            fired_rules=assessment.fired_rules,
-                            applied_floors=assessment.applied_floors
-                        )
-                        
-                        # Run agent orchestration
-                        agent_result = await orchestrator.analyze(
-                            call_id=call_id,
-                            evidence=evidence,
-                            trust_context=trust_graph.get_trust_context(claimed_contact, None, None),
-                            score_breakdown=score_breakdown,
-                            timeout_per_agent=settings.tier2_timeout
-                        )
-                        
-                        # Store agent analysis results
-                        agent_analysis_json = json.dumps({
-                            "tier2_status": agent_result.tier2_status,
-                            "fraud_findings": [f.model_dump() for f in agent_result.fraud_findings],
-                            "skeptic_challenges": [c.model_dump() for c in agent_result.skeptic_challenges],
-                            "agent_metadata": agent_result.agent_metadata,
-                            "warnings": agent_result.warnings
-                        }, ensure_ascii=False)
-                        
-                        logger.info(
-                            f"[{call_id}] Tier 2: {agent_result.tier2_status}, "
-                            f"{len(agent_result.fraud_findings)} findings, "
-                            f"{len(agent_result.skeptic_challenges)} challenges"
-                        )
-                    
-                except Exception as e:
-                    logger.warning(
-                        f"[{call_id}] Tier 2 agent analysis failed (Phase 2 result preserved): {e}",
-                        exc_info=True
-                    )
-                    # Tier 2 failure does not affect Phase 2 results
-                
+
             except Exception as e:
                 logger.warning(
-                    f"[{call_id}] Trust Engine assessment failed, falling back to preliminary: {e}",
+                    f"[{call_id}] Trust Engine assessment failed, using text-based fallback: {e}",
                     exc_info=True
                 )
-                # Fallback to basic reasons if Trust Engine fails
-                reasons, warnings = self._generate_basic_reasons(
-                    asr_result, voice_evidence
+                # Fallback: basic text analysis
+                risk_score, risk_level, reasons, agent_findings = (
+                    self._basic_text_analysis(full_text, asr_result)
                 )
-                risk_score, risk_level = self._preliminary_risk(voice_evidence)
-                recommended_actions = ["Await full analysis from Judge module"]
+                warnings.append(
+                    f"Trust Engine unavailable — using simplified text analysis. ({str(e)[:100]})"
+                )
+                recommended_actions.append(
+                    "Verify caller identity through independent channels"
+                )
 
-            # Store or update AnalysisReport
+            # Add ASR warnings
+            if asr_result.transcription_status == "failed":
+                warnings.append("ASR transcription failed — transcript unavailable.")
+            elif asr_result.transcription_status == "unavailable":
+                warnings.append(
+                    "faster-whisper not installed — transcript unavailable. "
+                    "Install with: pip install faster-whisper"
+                )
+            
+            if not recommended_actions:
+                recommended_actions = self._get_default_actions(risk_level)
+
+            # ── Step 7: Persist to DB ─────────────────────────────────────────
             report = (
                 db.query(AnalysisReport)
                 .filter(AnalysisReport.call_id == call_id)
@@ -345,8 +285,7 @@ class RealAnalysisService:
                 db.add(report)
 
             report.transcript_json = json.dumps(transcript_dict, ensure_ascii=False)
-            report.voice_json = json.dumps(voice_dict, ensure_ascii=False)
-            report.agent_findings_json = agent_analysis_json if agent_analysis_json else json.dumps([], ensure_ascii=False)
+            report.agent_findings_json = json.dumps(agent_findings, ensure_ascii=False)
             report.risk_level = risk_level
             report.risk_score = risk_score
             report.reasons_json = json.dumps(reasons, ensure_ascii=False)
@@ -354,32 +293,29 @@ class RealAnalysisService:
                 recommended_actions, ensure_ascii=False
             )
             report.warnings_json = json.dumps(warnings, ensure_ascii=False)
-            report.analysis_mode = "real"
-            
-            # Phase 5: Persist v3 Trust Engine fields
-            if 'assessment' in locals() and assessment:
-                report.category_scores_json = json.dumps(assessment.category_scores, ensure_ascii=False)
-                report.fired_rules_json = json.dumps(assessment.fired_rules, ensure_ascii=False)
-                report.killchain_stage = assessment.killchain_stage  # Task 2: Persist killchain stage
-                if 'verification_obj' in locals() and verification_obj:
-                    report.verification_json = json.dumps(verification_obj, ensure_ascii=False)
+            report.analysis_mode = self.analysis_mode
 
-            # ── Step 7: Mark completed ────────────────────────────────────────
+            # ── Step 8: Mark completed ────────────────────────────────────────
             call.status = "completed"
             call.completed_at = datetime.now(timezone.utc)
             db.commit()
 
-            logger.info(f"[{call_id}] Analysis complete ✓")
+            logger.info(f"[{call_id}] Real analysis complete ✓")
 
         except Exception as e:
             logger.error(
                 f"[{call_id}] Analysis pipeline failed: {e}", exc_info=True
             )
-            call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
-            if call:
-                call.status = "failed"
-                call.error_message = str(e)[:500]
-                db.commit()
+            try:
+                call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
+                if call:
+                    call.status = "failed"
+                    call.error_message = str(e)[:500]
+                    call.completed_at = datetime.now(timezone.utc)
+                    db.commit()
+            except Exception as commit_error:
+                logger.error(f"Failed to update error status: {commit_error}")
+                db.rollback()
 
         finally:
             # Clean up temp WAV
@@ -388,62 +324,131 @@ class RealAnalysisService:
                     wav_path.unlink()
                 except Exception:
                     pass
+            # Always close the database session
+            db.close()
 
     @staticmethod
-    def _generate_basic_reasons(
-        asr: ASRResult, voice: VoiceEvidence
-    ) -> tuple[list[str], list[str]]:
+    def _basic_text_analysis(
+        full_text: str, asr_result: ASRResult
+    ) -> tuple[int, str, list[str], list[dict]]:
         """
-        Generate human-readable preliminary reasons from ASR + voice results.
-        The full evidence extraction is done by M3 (evidence layer).
+        Fallback text-based analysis when Trust Engine is unavailable.
+        Scans transcript for common fraud indicators.
         """
-        reasons: list[str] = []
-        warnings: list[str] = []
+        text_lower = full_text.lower()
+        reasons = []
+        findings = []
+        score = 0
 
-        if asr.transcription_status == "failed":
-            warnings.append("ASR transcription failed — transcript unavailable.")
-        elif asr.transcription_status == "unavailable":
-            warnings.append(
-                "faster-whisper not installed — transcript unavailable. "
-                "Install with: pip install faster-whisper"
-            )
+        # Credential requests
+        cred_patterns = [
+            ("otp", "OTP/one-time password request"),
+            ("password", "Password request"),
+            ("pin number", "PIN number request"),
+            ("card number", "Card number request"),
+            ("cvv", "CVV/security code request"),
+            ("account number", "Account number request"),
+            ("social security", "Social security number request"),
+            ("bank details", "Bank details request"),
+        ]
+        for pattern, label in cred_patterns:
+            if pattern in text_lower:
+                score += 25
+                reasons.append(f"Sensitive credential request detected: {label}")
+                findings.append({
+                    "agent": "text_analyzer",
+                    "signal": "sensitive_credential_request",
+                    "severity": "critical",
+                    "evidence_text": label,
+                    "start_time": None,
+                    "end_time": None,
+                    "confidence": None,
+                    "source": "real_text_analysis"
+                })
 
-        if voice.status == "unavailable":
-            warnings.append(
-                "Voice layer unavailable — install torch, transformers, "
-                "speechbrain for voice-clone detection."
-            )
-        elif voice.status == "inconclusive":
-            warnings.append(
-                f"Voice analysis inconclusive: {voice.error or 'insufficient audio quality'}."
-            )
-        elif voice.status == "ok" and voice.spoof_prob is not None:
-            if voice.spoof_prob >= 0.80:
-                reasons.append(
-                    f"Voice shows strong synthetic indicators "
-                    f"(spoof_prob={voice.spoof_prob:.2f}) [experimental]."
-                )
-            elif voice.spoof_prob >= 0.60:
-                reasons.append(
-                    f"Voice shows moderate synthetic indicators "
-                    f"(spoof_prob={voice.spoof_prob:.2f}) [experimental]."
-                )
+        # Urgency tactics
+        urgency_patterns = [
+            ("immediately", "Urgency: 'immediately'"),
+            ("urgent", "Urgency tactic"),
+            ("right now", "Urgency: 'right now'"),
+            ("limited time", "Limited time pressure"),
+            ("will be blocked", "Account blocking threat"),
+            ("will be suspended", "Account suspension threat"),
+            ("will be closed", "Account closure threat"),
+            ("act fast", "Urgency: 'act fast'"),
+            ("hurry", "Urgency: 'hurry'"),
+        ]
+        for pattern, label in urgency_patterns:
+            if pattern in text_lower:
+                score += 15
+                reasons.append(f"Urgency/pressure tactic: {label}")
+                findings.append({
+                    "agent": "text_analyzer",
+                    "signal": "urgency_tactic",
+                    "severity": "high",
+                    "evidence_text": label,
+                    "start_time": None,
+                    "end_time": None,
+                    "confidence": None,
+                    "source": "real_text_analysis"
+                })
 
-        return reasons, warnings
+        # Authority impersonation
+        authority_patterns = [
+            ("bank security", "Bank security department claim"),
+            ("fraud department", "Fraud department claim"),
+            ("government", "Government authority claim"),
+            ("police", "Law enforcement claim"),
+            ("income tax", "Tax authority claim"),
+            ("reserve bank", "Central bank claim"),
+            ("rbi", "RBI claim"),
+        ]
+        for pattern, label in authority_patterns:
+            if pattern in text_lower:
+                score += 20
+                reasons.append(f"Authority impersonation: {label}")
+                findings.append({
+                    "agent": "text_analyzer",
+                    "signal": "authority_impersonation",
+                    "severity": "high",
+                    "evidence_text": label,
+                    "start_time": None,
+                    "end_time": None,
+                    "confidence": None,
+                    "source": "real_text_analysis"
+                })
 
-    @staticmethod
-    def _preliminary_risk(voice: VoiceEvidence) -> tuple[float, str]:
-        """
-        Compute preliminary risk from voice alone.
-        Full deterministic scoring is M3's responsibility.
-        """
-        score = 0.0
-        if voice.status == "ok" and voice.spoof_prob is not None:
-            if voice.spoof_prob >= 0.80:
-                score = 10.0
-            elif voice.spoof_prob >= 0.60:
-                score = 5.0
+        # Money transfer requests
+        money_patterns = [
+            ("transfer money", "Money transfer request"),
+            ("send money", "Money sending request"),
+            ("wire transfer", "Wire transfer request"),
+            ("gift card", "Gift card purchase request"),
+            ("crypto", "Cryptocurrency payment request"),
+            ("bitcoin", "Bitcoin payment request"),
+            ("upi", "UPI transfer request"),
+            ("google pay", "Payment app request"),
+            ("paytm", "Payment app request"),
+        ]
+        for pattern, label in money_patterns:
+            if pattern in text_lower:
+                score += 25
+                reasons.append(f"Financial request: {label}")
+                findings.append({
+                    "agent": "text_analyzer",
+                    "signal": "financial_request",
+                    "severity": "critical",
+                    "evidence_text": label,
+                    "start_time": None,
+                    "end_time": None,
+                    "confidence": None,
+                    "source": "real_text_analysis"
+                })
 
+        # Cap score at 100
+        score = min(score, 100)
+
+        # Determine risk level
         if score >= 75:
             level = "critical"
         elif score >= 50:
@@ -453,7 +458,32 @@ class RealAnalysisService:
         else:
             level = "low"
 
-        return score, level
+        if not reasons:
+            reasons.append("No suspicious patterns detected in transcript")
+
+        return score, level, reasons, findings
+
+    @staticmethod
+    def _get_default_actions(risk_level: str) -> list[str]:
+        """Return default recommended actions based on risk level."""
+        if risk_level in ("high", "critical"):
+            return [
+                "Do NOT share any sensitive information with this caller",
+                "Hang up and call back using an official number you trust",
+                "Report this call to your bank or the relevant authority",
+                "Block this number if you suspect fraud",
+            ]
+        elif risk_level == "medium":
+            return [
+                "Verify the caller's identity through independent channels",
+                "Do not share OTPs, passwords, or financial details",
+                "Call back using an official number to confirm",
+            ]
+        else:
+            return [
+                "Always verify caller identity for financial matters",
+                "Never share OTPs or passwords over the phone",
+            ]
 
 
 # ── Singleton ─────────────────────────────────────────────────────────────────

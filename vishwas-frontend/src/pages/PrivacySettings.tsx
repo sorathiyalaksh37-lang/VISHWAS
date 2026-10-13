@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import {
+  CheckCircleIcon,
   DatabaseIcon,
   LayoutIcon,
+  LoaderIcon,
   MonitorIcon,
   RotateCcwIcon,
   Settings2Icon,
   WifiOffIcon,
 } from 'lucide-react'
+import { apiClient, type HealthResponse } from '../services/api'
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Preferences stored in localStorage
@@ -51,7 +54,8 @@ function savePrefs(prefs: UIPrefs) {
  */
 export function PrivacySettings() {
   const [prefs, setPrefs] = useState<UIPrefs>(loadPrefs)
-  const [connectionChecked, setConnectionChecked] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'failed'>('idle')
+  const [backendInfo, setBackendInfo] = useState<HealthResponse | null>(null)
 
   // Persist whenever prefs change
   useEffect(() => {
@@ -68,11 +72,23 @@ export function PrivacySettings() {
     savePrefs(defaults)
   }
 
-  function handleCheckConnection() {
-    // The health-check endpoint (api_client.py) is a Python backend function
-    // and is not accessible from this frontend-only build.
-    // We surface that fact honestly instead of simulating a response.
-    setConnectionChecked(true)
+  async function handleCheckConnection() {
+    setConnectionStatus('checking')
+    setBackendInfo(null)
+
+    try {
+      const health = await apiClient.checkHealth()
+      
+      if (health) {
+        setConnectionStatus('connected')
+        setBackendInfo(health)
+      } else {
+        setConnectionStatus('failed')
+      }
+    } catch (error) {
+      console.error('Connection check failed:', error)
+      setConnectionStatus('failed')
+    }
   }
 
   return (
@@ -167,12 +183,31 @@ export function PrivacySettings() {
             </button>
           </div>
 
-          {connectionChecked && (
-            <p className="connection-notice" role="alert" aria-live="polite">
-              The health-check function (api_client.py) is a Python backend utility and cannot be
-              called from this browser-only frontend. Start the backend service and reload to
-              establish a connection.
-            </p>
+          {connectionStatus === 'checking' && (
+            <div className="connection-notice connection-notice--checking" role="status" aria-live="polite">
+              <LoaderIcon size={14} className="analysis-status__spinner" aria-hidden="true" />
+              <span>Checking backend connection...</span>
+            </div>
+          )}
+
+          {connectionStatus === 'connected' && backendInfo && (
+            <div className="connection-notice connection-notice--success" role="status" aria-live="polite">
+              <CheckCircleIcon size={14} aria-hidden="true" />
+              <div>
+                <strong>Backend connected</strong>
+                <span> • {backendInfo.service} v{backendInfo.version}</span>
+              </div>
+            </div>
+          )}
+
+          {connectionStatus === 'failed' && (
+            <div className="connection-notice connection-notice--error" role="alert" aria-live="assertive">
+              <WifiOffIcon size={14} aria-hidden="true" />
+              <div>
+                <strong>Connection failed</strong>
+                <span> • Make sure the backend is running on port 8000</span>
+              </div>
+            </div>
           )}
         </div>
       </section>

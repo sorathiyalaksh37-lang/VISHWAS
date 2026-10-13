@@ -31,6 +31,41 @@ async def lifespan(app: FastAPI):
     logger.info(f"Whisper model: {settings.whisper_model_size} ({settings.whisper_compute_type} on {settings.whisper_device})")
     logger.info(f"Voice layer: {'enabled' if settings.enable_voice_layer else 'disabled'}")
     
+    # Health checks for real mode
+    if settings.analysis_mode == "real":
+        from app.audio.preprocessor import FFMPEG_AVAILABLE
+        if not FFMPEG_AVAILABLE:
+            logger.error(
+                "⚠️  CRITICAL: ffmpeg not found on PATH. "
+                "Audio conversion will fail. Install ffmpeg to use real analysis mode."
+            )
+        else:
+            logger.info("✓ ffmpeg available for audio conversion")
+        
+        # Check if faster-whisper can be imported
+        try:
+            import faster_whisper  # noqa: F401
+            logger.info("✓ faster-whisper installed for ASR")
+        except ImportError:
+            logger.warning(
+                "⚠️  faster-whisper not installed. "
+                "Install with: pip install faster-whisper"
+            )
+        
+        # Check voice layer dependencies
+        if settings.enable_voice_layer:
+            try:
+                import torch  # noqa: F401
+                logger.info("✓ torch available for voice layer")
+            except ImportError:
+                logger.warning("⚠️  torch not installed - voice layer will be unavailable")
+            
+            try:
+                import speechbrain  # noqa: F401
+                logger.info("✓ speechbrain available for voiceprint matching")
+            except ImportError:
+                logger.warning("⚠️  speechbrain not installed - voiceprint matching unavailable")
+    
     # Initialize database
     init_db()
     

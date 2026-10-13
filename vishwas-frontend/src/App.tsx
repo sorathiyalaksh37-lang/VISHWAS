@@ -36,6 +36,7 @@ function readCompactPref(): boolean {
 function App() {
   const [activeItem, setActiveItem] = useState<NavItem>('overview')
   const [showReport, setShowReport] = useState(false)
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
 
   // Apply / remove the compact-layout attribute on <html>
   useEffect(() => {
@@ -63,7 +64,10 @@ function App() {
   // Reset the report sub-view when navigating away from the analyse page
   function handleNavigate(item: NavItem) {
     setActiveItem(item)
-    if (item !== 'analyse') setShowReport(false)
+    if (item !== 'analyse') {
+      setShowReport(false)
+      setSelectedCallId(null)
+    }
   }
 
   function renderPage() {
@@ -74,9 +78,9 @@ function App() {
         return <TrustGraphPage />
       case 'analyse':
         return showReport ? (
-          <AnalysisReport onBack={() => setShowReport(false)} />
+          <AnalysisReport callId={selectedCallId || undefined} onBack={() => setShowReport(false)} />
         ) : (
-          <AnalyseACall onViewReport={() => setShowReport(true)} />
+          <AnalyseACall onViewReport={(callId) => { setSelectedCallId(callId); setShowReport(true) }} />
         )
       case 'history':
         return <CallHistory />
