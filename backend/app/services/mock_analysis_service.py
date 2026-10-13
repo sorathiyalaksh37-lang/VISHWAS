@@ -97,13 +97,80 @@ class MockAnalysisService:
                     "source": "mock"
                 }
             ],
-            "risk_level": "high",
-            "risk_score": None,
+            "risk_level": "HIGH",
+            "risk_score": 85,
+            "category_scores": {
+                "identity": 0.9,
+                "request": 0.95,
+                "behavior": 0.75,
+                "channel": 0.5,
+                "voice": 0.65
+            },
+            "fired_rules": [
+                "authority_impersonation",
+                "credential_request_otp",
+                "urgency_time_pressure",
+                "threat_account_blocking"
+            ],
+            "killchain_stage": "execution",
+            "voice_data": {
+                "spoof_probability": 0.72,
+                "confidence": 0.88,
+                "is_likely_synthetic": True,
+                "quality": {
+                    "snr_db": 18.5,
+                    "overall": "medium"
+                }
+            },
+            "verification": {
+                "recommended_steps": [
+                    "callback_verification",
+                    "safe_word_challenge",
+                    "two_channel_confirmation"
+                ],
+                "safe_actions": [
+                    "Hang up and call back using official number",
+                    "Verify through independent channel (email, app)"
+                ],
+                "danger_actions": [
+                    "Sharing OTP or passwords",
+                    "Making immediate transfers",
+                    "Downloading software"
+                ]
+            },
+            "timeline": [
+                {
+                    "timestamp": 0.0,
+                    "event": "call_start",
+                    "description": "Call initiated"
+                },
+                {
+                    "timestamp": 0.0,
+                    "event": "authority_claim",
+                    "description": "Caller claims to be from bank security"
+                },
+                {
+                    "timestamp": 3.8,
+                    "event": "threat_introduced",
+                    "description": "Mentions suspicious activity on account"
+                },
+                {
+                    "timestamp": 6.5,
+                    "event": "credential_request",
+                    "description": "Requests OTP"
+                },
+                {
+                    "timestamp": 9.3,
+                    "event": "urgency_escalation",
+                    "description": "Creates time pressure (10 minute deadline)"
+                }
+            ],
             "reasons": [
                 "Authority impersonation detected (bank security claim)",
                 "Sensitive credential request (OTP)",
                 "Urgency tactics employed to pressure immediate action",
-                "Threat of account blocking to create fear"
+                "Threat of account blocking to create fear",
+                "Voice analysis suggests possible synthetic/spoofed audio"
             ],
             "recommended_actions": [
                 "Do not share OTP or any sensitive information with this caller",
@@ -142,13 +209,64 @@ class MockAnalysisService:
                 }
             ],
             "agent_findings": [],
-            "risk_level": "low",
-            "risk_score": None,
+            "risk_level": "LOW",
+            "risk_score": 12,
+            "category_scores": {
+                "identity": 0.1,
+                "request": 0.05,
+                "behavior": 0.15,
+                "channel": 0.2,
+                "voice": 0.1
+            },
+            "fired_rules": [],
+            "killchain_stage": None,
+            "voice_data": {
+                "spoof_probability": 0.08,
+                "confidence": 0.91,
+                "is_likely_synthetic": False,
+                "quality": {
+                    "snr_db": 24.3,
+                    "overall": "good"
+                }
+            },
+            "verification": {
+                "recommended_steps": [
+                    "standard_verification"
+                ],
+                "safe_actions": [
+                    "Verify through registered email if needed",
+                    "Use official customer service channels for follow-up"
+                ],
+                "danger_actions": []
+            },
+            "timeline": [
+                {
+                    "timestamp": 0.0,
+                    "event": "call_start",
+                    "description": "Call initiated"
+                },
+                {
+                    "timestamp": 0.0,
+                    "event": "professional_greeting",
+                    "description": "Professional introduction"
+                },
+                {
+                    "timestamp": 2.8,
+                    "event": "legitimate_purpose",
+                    "description": "Follow-up on existing inquiry"
+                },
+                {
+                    "timestamp": 5.8,
+                    "event": "non_invasive_request",
+                    "description": "Offers to send info to registered email"
+                }
+            ],
             "reasons": [
                 "No suspicious patterns detected",
                 "No requests for sensitive credentials",
                 "No urgency or threat tactics",
-                "Professional and courteous communication"
+                "Professional and courteous communication",
+                "Voice analysis shows natural human speech patterns"
             ],
             "recommended_actions": [
                 "Verify caller identity if needed by calling back using official contact information",
@@ -185,13 +303,14 @@ class MockAnalysisService:
             call_id: UUID of the call to analyze
         """
         # Create a new database session for the background task
-        from app.core.database import SessionLocal
+        from app.database.session import SessionLocal
         db = SessionLocal()
         
         try:
             logger.info(f"Starting mock analysis for call: {call_id}")
             
-            # Get call record
+            # Get call recordWorking..
+            
             call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
             if not call:
                 logger.error(f"Call not found: {call_id}")
@@ -231,13 +350,19 @@ class MockAnalysisService:
             report = AnalysisReport(
                 call_id=call_id,
                 transcript_json=json.dumps(transcript_data),
+                voice_json=json.dumps(scenario.get("voice_data")),
                 agent_findings_json=json.dumps(scenario["agent_findings"]),
                 risk_level=scenario["risk_level"],
                 risk_score=scenario.get("risk_score"),
                 reasons_json=json.dumps(scenario["reasons"]),
                 recommended_actions_json=json.dumps(scenario["recommended_actions"]),
                 warnings_json=json.dumps(warnings),
-                analysis_mode=self.analysis_mode
+                analysis_mode=self.analysis_mode,
+                # v3 Trust Engine fields
+                category_scores_json=json.dumps(scenario.get("category_scores")),
+                fired_rules_json=json.dumps(scenario.get("fired_rules", [])),
+                verification_json=json.dumps(scenario.get("verification")),
+                killchain_stage=scenario.get("killchain_stage")
             )
             
             # Check if report already exists (shouldn't happen, but be safe)
@@ -248,12 +373,17 @@ class MockAnalysisService:
             if existing_report:
                 logger.warning(f"Report already exists for call {call_id}, updating...")
                 existing_report.transcript_json = report.transcript_json
+                existing_report.voice_json = report.voice_json
                 existing_report.agent_findings_json = report.agent_findings_json
                 existing_report.risk_level = report.risk_level
                 existing_report.risk_score = report.risk_score
                 existing_report.reasons_json = report.reasons_json
                 existing_report.recommended_actions_json = report.recommended_actions_json
                 existing_report.warnings_json = report.warnings_json
+                existing_report.category_scores_json = report.category_scores_json
+                existing_report.fired_rules_json = report.fired_rules_json
+                existing_report.verification_json = report.verification_json
+                existing_report.killchain_stage = report.killchain_stage
             else:
                 db.add(report)
             
