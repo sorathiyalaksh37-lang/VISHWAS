@@ -123,6 +123,8 @@ export function VoiceDetectionPage() {
         position = 0
 
         // Send chunk to backend
+        // Note: Partial chunks (< 48000 bytes) are dropped when recording stops.
+        // This is expected behavior as the backend requires exactly 48000 bytes per chunk.
         if (sessionId) {
           try {
             const blob = new Blob([chunk], { type: 'application/octet-stream' })
@@ -137,15 +139,24 @@ export function VoiceDetectionPage() {
                 setStatus('analyzing')
               }
             } else {
+              // Network error or non-404 failure
               setStatus('error')
               setErrorMsg('Network error - check backend connection')
               stopRecording()
             }
           } catch (error) {
             console.error('Error sending chunk:', error)
-            setStatus('error')
-            setErrorMsg('Failed to send audio chunk')
-            stopRecording()
+            
+            // Check if session expired (404 response)
+            if (error instanceof Error && error.message.includes('404')) {
+              setStatus('error')
+              setErrorMsg('Session expired - please restart')
+              stopRecording()
+            } else {
+              setStatus('error')
+              setErrorMsg('Failed to send audio chunk')
+              stopRecording()
+            }
           }
         }
       }
@@ -193,6 +204,9 @@ export function VoiceDetectionPage() {
       const source = audioContext.createMediaStreamSource(stream)
 
       // Create processor node (4096 buffer size)
+      // Note: ScriptProcessorNode is deprecated in favor of AudioWorkletNode, but we use it here
+      // for broader cross-browser compatibility. AudioWorklet requires a separate worklet module
+      // file which adds build complexity. Modern browsers still support ScriptProcessorNode.
       const processor = audioContext.createScriptProcessor(4096, CHANNELS, CHANNELS)
       processorRef.current = processor
 
@@ -224,6 +238,9 @@ export function VoiceDetectionPage() {
   async function stopRecording() {
     setRecording(false)
     setStatus('idle')
+
+    // Reset buffer position to prevent stale buffer state on restart
+    bufferPositionRef.current = 0
 
     // Stop processor
     if (processorRef.current) {

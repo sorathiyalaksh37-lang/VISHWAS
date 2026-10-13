@@ -170,7 +170,7 @@ export interface StreamSessionResponse {
 export interface StreamChunkResponse {
   status: string
   label: string
-  spoof_prob: number
+  spoof_prob: number | null
   confidence: string
   duration_analyzed_ms: number
   chunks_processed: number
@@ -249,6 +249,12 @@ class APIClient {
         body: formData,
       })
 
+      if (response.status === 404) {
+        // Session not found or expired
+        const errorData = await response.json().catch(() => ({ detail: 'Session not found or expired' }))
+        throw new Error(`404: ${errorData.detail || 'Session not found or expired'}`)
+      }
+
       if (!response.ok) {
         console.error(`Send voice chunk failed: ${response.status}`)
         return null
@@ -257,7 +263,8 @@ class APIClient {
       return await response.json()
     } catch (error) {
       console.error('Send voice chunk error:', error)
-      return null
+      // Re-throw to allow component to handle specific error types
+      throw error
     }
   }
 
