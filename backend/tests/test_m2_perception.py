@@ -8,35 +8,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-# ── In-memory SQLite for tests ─────────────────────────────────────────────────
-# We use a file-based SQLite (not :memory:) so that the engine created inside
-# app/database/session.py (at module-import time) and our test engine both see
-# the same data.  We monkeypatch DATABASE_URL before importing the app.
+# Use shared test configuration from conftest.py
+# The database and engine are already set up there
+from conftest import test_engine, TestingSessionLocal
 
-import os
-
-# Point the app at a temp file DB for the duration of this test module
-_tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-_tmp_db.close()
-TEST_DB_URL = f"sqlite:///{_tmp_db.name}"
-
-# Override DATABASE_URL *before* importing the app so session.py picks it up
-os.environ["DATABASE_URL"] = TEST_DB_URL
-
-from app.database.base import Base       # noqa: E402
-from app.database.session import get_db  # noqa: E402
-import app.models                        # noqa: E402, F401 — register models
-
-from app.main import app                 # noqa: E402
-
-engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+from app.database.base import Base
+from app.database.session import get_db
+import app.models  # noqa: F401 — register models
+from app.main import app
 
 
 def override_get_db():
+    """Override get_db dependency to use test database."""
     db = TestingSessionLocal()
     try:
         yield db
@@ -45,21 +29,6 @@ def override_get_db():
 
 
 app.dependency_overrides[get_db] = override_get_db
-
-
-@pytest.fixture(autouse=True)
-def setup_db():
-    """Create all tables before each test, drop after."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-
-@pytest.fixture
-def client():
-    """Return a TestClient with lifespan disabled (tables already exist)."""
-    with TestClient(app) as c:
-        yield c
 
 
 # Module-level client for class-based tests that don't use the fixture

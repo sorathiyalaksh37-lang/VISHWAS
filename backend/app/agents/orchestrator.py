@@ -2,6 +2,9 @@
 Agent Orchestrator — Coordinates Fraud and Skeptic agents.
 
 Handles bounded execution, validation, and graceful fallback to Phase 2.
+
+IMPORTANT: All evidence quotes have been PII-masked by evidence_pipeline.py
+before reaching this module. Never pass raw transcript text to agents.
 """
 import logging
 import asyncio
@@ -182,7 +185,7 @@ class AgentOrchestrator:
                         "type": claim.type,
                         "value": claim.value,
                         "confidence": claim.confidence,
-                        "quote": claim.quote[:100]  # Truncate for privacy
+                        "quote": claim.quote[:100] if claim.quote else None  # Already PII-masked
                     }
                     for i, claim in enumerate(evidence.claims.claims)
                 ]
