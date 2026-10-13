@@ -100,7 +100,7 @@ fun HomeScreen(
                 }
             }
             
-            // Phase 1 notice
+            // How it works
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -116,7 +116,7 @@ fun HomeScreen(
                         contentDescription = null
                     )
                     Text(
-                        text = "Phase 1: Mock Analysis Mode\n\nAnalysis results are for demonstration only.",
+                        text = "How it works\n\nUpload or record a call. VISHWAS scores scam risk from what is said and how the voice sounds. Voice checks are experimental.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
