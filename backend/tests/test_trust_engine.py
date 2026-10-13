@@ -40,7 +40,7 @@ def create_minimal_evidence(
             has_action=False
         ),
         behavior=BehaviorEvidence(
-            urgency=UrgencyEvidence(detected=urgency, severity="high" if urgency else None, indicators=[]),
+            urgency=UrgencyEvidence(detected=urgency, severity="high" if urgency else "low", indicators=[]),
             secrecy=SecrecyEvidence(detected=secrecy, indicators=[]),
             emotional_pressure=EmotionalPressureEvidence(detected=False, pressure_types=[], indicators=[]),
             call_timing=None

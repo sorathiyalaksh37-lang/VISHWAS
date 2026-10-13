@@ -23,7 +23,7 @@ def create_test_evidence(
     """Create minimal evidence for testing."""
     evidence = EvidenceExtraction(
         call_id="test-call",
-        claims=ClaimsEvidence(claims=[], primary_claim=None, primary_claim_type=None),
+        claims=ClaimsEvidence(claims=[], primary_claim=None),
         requests=RequestEvidence(
             money_requests=[],
             credential_requests=[],
@@ -55,13 +55,23 @@ def create_test_evidence(
             confidence=0.95
         )]
         evidence.claims.primary_claim = evidence.claims.claims[0]
-        evidence.claims.primary_claim_type = "relative"
     
     if money_amount:
-        evidence.requests.money_requests = [MoneyRequest(amount=money_amount, urgency_level="normal")]
+        evidence.requests.money_requests = [MoneyRequest(
+            amount=money_amount, 
+            urgency_level="normal",
+            quote="Please send money",
+            t=1.0,
+            confidence=0.95
+        )]
     
     if credential_type:
-        evidence.requests.credential_requests = [CredentialRequest(type=credential_type, details=credential_type.upper())]
+        evidence.requests.credential_requests = [CredentialRequest(
+            type=credential_type, 
+            quote=f"Please provide your {credential_type.upper()}",
+            t=1.5,
+            confidence=0.95
+        )]
     
     return evidence
 
