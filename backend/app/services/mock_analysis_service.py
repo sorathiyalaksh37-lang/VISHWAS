@@ -170,7 +170,7 @@ class MockAnalysisService:
         else:
             return self._get_legitimate_scenario()
     
-    def analyze_call(self, db: Session, call_id: str) -> None:
+    def analyze_call(self, call_id: str) -> None:
         """
         Run mock analysis on a call recording.
         
@@ -182,9 +182,12 @@ class MockAnalysisService:
         5. Updates call status to 'completed'
         
         Args:
-            db: Database session
             call_id: UUID of the call to analyze
         """
+        # Create a new database session for the background task
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        
         try:
             logger.info(f"Starting mock analysis for call: {call_id}")
             
@@ -275,6 +278,9 @@ class MockAnalysisService:
             except Exception as commit_error:
                 logger.error(f"Failed to update error status: {commit_error}")
                 db.rollback()
+        finally:
+            # Always close the database session
+            db.close()
 
 
 # Singleton instance

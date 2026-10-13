@@ -86,10 +86,9 @@ async def upload_recording(
 
     logger.info(f"CallRecord created: {call.id} (mode={settings.analysis_mode})")
 
-    # Queue background analysis
+    # Queue background analysis (pass call_id only, not the db session)
     background_tasks.add_task(
         _analysis_service().analyze_call,
-        db=db,
         call_id=call.id,
     )
 

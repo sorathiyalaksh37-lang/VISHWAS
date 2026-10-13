@@ -1,185 +1,253 @@
-import { useState } from 'react'
-import {
-  ClockIcon,
-  FilterIcon,
-  InboxIcon,
-  RefreshCwIcon,
-  SearchIcon,
-  WifiOffIcon,
-  XIcon,
-} from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { HistoryIcon, RefreshCwIcon, WifiOffIcon, LoaderIcon } from 'lucide-react'
+import { apiClient, type CallListItem } from '../services/api'
 
-type StatusFilter = 'all' | 'completed' | 'in-progress' | 'failed'
-
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'in-progress', label: 'In Progress' },
-  { value: 'failed', label: 'Failed' },
-]
+type FilterOption = 'all' | 'completed' | 'high-risk' | 'failed'
 
 /**
  * Call History page.
  *
- * Displays a searchable, filterable table of analysed calls.
- * Because the backend is not connected there are no genuine records to show,
- * so the empty state is always visible.
- *
- * Search and filter logic is wired up and ready to work as soon as real
- * records are provided by the backend.
- *
- * IMPORTANT: No mock calls, fabricated dates, or invented risk scores.
+ * Displays a list of all analysed call recordings from the backend.
+ * Includes filters for status and risk level.
  */
 export function CallHistory() {
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [records, setRecords] = useState<CallListItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<FilterOption>('all')
   const [refreshKey, setRefreshKey] = useState(0)
-  const [refreshed, setRefreshed] = useState(false)
 
-  // Real records would come from an API call. While backend is disconnected,
-  // this is always empty.
-  const records: never[] = []
+  useEffect(() => {
+    loadCallHistory()
+  }, [refreshKey])
 
-  const filtersActive = search.trim() !== '' || statusFilter !== 'all'
+  async function loadCallHistory() {
+    setLoading(true)
+    setError(null)
 
-  function clearFilters() {
-    setSearch('')
-    setStatusFilter('all')
+    try {
+      const response = await apiClient.listCalls(1, 50)
+
+      if (!response) {
+        setError('Failed to load call history. Please check backend connection.')
+        setRecords([])
+        return
+      }
+
+      setRecords(response.calls)
+    } catch (err) {
+      console.error('Error loading call history:', err)
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      setRecords([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   function handleRefresh() {
-    setRefreshKey((k) => k + 1)
-    setRefreshed(true)
-    // Auto-reset the 'Refreshed' label after 2 s
-    setTimeout(() => setRefreshed(false), 2000)
+    setRefreshKey(prev => prev + 1)
   }
 
-  // Filter logic — safe to call even when records is empty.
-  // When real data arrives, this will work correctly.
-  const filteredRecords = records.filter((_record) => {
-    return true // placeholder; real filter applied once data shape is known
+  const filteredRecords = records.filter(record => {
+    switch (filter) {
+      case 'completed':
+        return record.status === 'completed'
+      case 'high-risk':
+        return record.risk_level === 'high' || record.risk_level === 'critical'
+      case 'failed':
+        return record.status === 'failed'
+      default:
+        return true
+    }
   })
-  void filteredRecords // suppress "unused variable" lint warning
-  void refreshKey    // used to trigger conceptual re-fetch
+
+  function getRiskBadgeClass(riskLevel?: string): string {
+    switch (riskLevel) {
+      case 'low':
+        return 'history__badge history__badge--low'
+      case 'medium':
+        return 'history__badge history__badge--medium'
+      case 'high':
+      case 'critical':
+        return 'history__badge history__badge--high'
+      default:
+        return 'history__badge'
+    }
+  }
+
+  function getStatusBadgeClass(status: string): string {
+    switch (status) {
+      case 'completed':
+        return 'history__badge history__badge--completed'
+      case 'processing':
+      case 'queued':
+        return 'history__badge history__badge--processing'
+      case 'failed':
+        return 'history__badge history__badge--failed'
+      default:
+        return 'history__badge'
+    }
+  }
+
+  function formatDate(dateString: string): string {
+    try {
+      const date = new Date(dateString)
+      const now = new Date()
+      const diffMs = now.getTime() - date.getTime()
+      const diffMins = Math.floor(diffMs / 60000)
+      const diffHours = Math.floor(diffMs / 3600000)
+      const diffDays = Math.floor(diffMs / 86400000)
+
+      if (diffMins < 1) return 'Just now'
+      if (diffMins < 60) return `${diffMins} min ago`
+      if (diffHours < 24) return `${diffHours}h ago`
+      if (diffDays === 1) return 'Yesterday'
+      if (diffDays < 7) return `${diffDays} days ago`
+
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+      })
+    } catch {
+      return dateString
+    }
+  }
 
   return (
     <div className="page-content">
       {/* Page heading */}
       <div className="page-heading">
-        <div className="page-heading__icon-wrap page-heading__icon-wrap--warn" aria-hidden="true">
-          <ClockIcon size={20} strokeWidth={1.75} />
+        <div className="page-heading__icon-wrap" aria-hidden="true">
+          <HistoryIcon size={20} strokeWidth={1.75} />
         </div>
         <div>
           <h1 className="page-heading__title">Call History</h1>
           <p className="page-heading__subtitle">
-            Review previously analysed calls and their security findings.
+            View and manage all analysed call recordings.
           </p>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="history-toolbar" role="search" aria-label="Filter call history">
-        {/* Search */}
-        <div className="history-search">
-          <SearchIcon size={15} className="history-search__icon" aria-hidden="true" />
-          <input
-            id="history-search-input"
-            type="search"
-            className="history-search__input"
-            placeholder="Search recordings…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search recordings by name"
-          />
-        </div>
-
-        {/* Status filter */}
-        <div className="history-filters" role="group" aria-label="Filter by status">
-          <FilterIcon size={14} aria-hidden="true" className="history-filters__icon" />
-          {STATUS_OPTIONS.map(({ value, label }) => (
-            <button
-              key={value}
-              className={`history-filter-btn${statusFilter === value ? ' history-filter-btn--active' : ''}`}
-              onClick={() => setStatusFilter(value)}
-              aria-pressed={statusFilter === value}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Actions */}
-        <div className="history-toolbar__actions">
-          {filtersActive && (
-            <button
-              className="btn-ghost btn-ghost--sm"
-              onClick={clearFilters}
-              aria-label="Clear all filters"
-            >
-              <XIcon size={13} aria-hidden="true" />
-              Clear Filters
-            </button>
-          )}
+      {/* Filters & actions */}
+      <div className="history__toolbar">
+        <div className="history__filters" role="group" aria-label="Filter history">
           <button
-            className="btn-ghost btn-ghost--sm"
-            onClick={handleRefresh}
-            aria-label="Refresh history"
-            aria-live="polite"
+            className={filter === 'all' ? 'filter-btn filter-btn--active' : 'filter-btn'}
+            onClick={() => setFilter('all')}
+            aria-pressed={filter === 'all'}
           >
-            <RefreshCwIcon size={13} aria-hidden="true" />
-            {refreshed ? 'Refreshed' : 'Refresh'}
+            All Calls ({records.length})
+          </button>
+          <button
+            className={filter === 'completed' ? 'filter-btn filter-btn--active' : 'filter-btn'}
+            onClick={() => setFilter('completed')}
+            aria-pressed={filter === 'completed'}
+          >
+            Completed
+          </button>
+          <button
+            className={filter === 'high-risk' ? 'filter-btn filter-btn--active' : 'filter-btn'}
+            onClick={() => setFilter('high-risk')}
+            aria-pressed={filter === 'high-risk'}
+          >
+            High Risk
+          </button>
+          <button
+            className={filter === 'failed' ? 'filter-btn filter-btn--active' : 'filter-btn'}
+            onClick={() => setFilter('failed')}
+            aria-pressed={filter === 'failed'}
+          >
+            Failed
           </button>
         </div>
+
+        <button
+          className="btn-ghost btn-ghost--sm"
+          onClick={handleRefresh}
+          disabled={loading}
+          aria-label="Refresh history"
+        >
+          <RefreshCwIcon size={16} aria-hidden="true" />
+          Refresh
+        </button>
       </div>
 
-      {/* Table */}
-      <div className="analyses-table-wrapper" role="region" aria-label="Call history table">
-        <table className="analyses-table" aria-label="Call history">
-          <thead>
-            <tr>
-              <th scope="col">Recording</th>
-              <th scope="col">Date</th>
-              <th scope="col">Status</th>
-              <th scope="col">Risk Level</th>
-              <th scope="col">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* Empty state — always shown until backend supplies records */}
-            <tr>
-              <td colSpan={5}>
-                <div className="analyses-empty">
-                  <InboxIcon
-                    size={40}
-                    strokeWidth={1.25}
-                    className="analyses-empty__icon"
-                    aria-hidden="true"
-                  />
-                  <p className="analyses-empty__title">
-                    {filtersActive ? 'No records match your filters' : 'No call history yet'}
-                  </p>
-                  <p className="analyses-empty__body">
-                    {filtersActive
-                      ? 'Try clearing the filters or adjusting your search.'
-                      : 'Analysed calls will appear here once the backend is connected.'}
-                  </p>
-                  {filtersActive && (
-                    <button className="btn-ghost btn-ghost--sm" onClick={clearFilters}>
-                      Clear Filters
-                    </button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {/* Content area */}
+      {loading && (
+        <div className="history__loading">
+          <LoaderIcon size={24} className="analysis-status__spinner" aria-hidden="true" />
+          <p>Loading call history...</p>
+        </div>
+      )}
 
-      {/* Backend disconnected indicator */}
-      <div className="backend-indicator" aria-label="Backend connection status">
-        <WifiOffIcon size={13} aria-hidden="true" />
-        <span>Backend not connected — history requires a live API</span>
-      </div>
+      {error && (
+        <div className="backend-indicator backend-indicator--error" role="alert">
+          <WifiOffIcon size={13} aria-hidden="true" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {!loading && !error && filteredRecords.length === 0 && (
+        <div className="history__empty">
+          <p>No calls found matching the selected filter.</p>
+          {filter !== 'all' && (
+            <button className="btn-ghost btn-ghost--sm" onClick={() => setFilter('all')}>
+              Show all calls
+            </button>
+          )}
+        </div>
+      )}
+
+      {!loading && !error && filteredRecords.length > 0 && (
+        <div className="history__list">
+          <table className="history-table">
+            <thead>
+              <tr>
+                <th>Filename</th>
+                <th>Status</th>
+                <th>Risk Level</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRecords.map(record => (
+                <tr key={record.call_id}>
+                  <td className="history-table__filename">
+                    {record.original_filename}
+                  </td>
+                  <td>
+                    <span className={getStatusBadgeClass(record.status)}>
+                      {record.status}
+                    </span>
+                  </td>
+                  <td>
+                    {record.risk_level ? (
+                      <span className={getRiskBadgeClass(record.risk_level)}>
+                        {record.risk_level}
+                      </span>
+                    ) : (
+                      <span className="history__badge">—</span>
+                    )}
+                  </td>
+                  <td className="history-table__date">
+                    {formatDate(record.created_at)}
+                  </td>
+                  <td>
+                    {record.status === 'completed' && (
+                      <button className="btn-ghost btn-ghost--xs">
+                        View Report
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
+

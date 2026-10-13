@@ -1,39 +1,162 @@
 import { useState } from 'react'
-import { AlertCircleIcon, FileAudioIcon, MicVocalIcon } from 'lucide-react'
+import { AlertCircleIcon, FileAudioIcon, MicVocalIcon, CheckCircleIcon, LoaderIcon } from 'lucide-react'
 import { AudioUpload, type AudioFileState } from '../components/shared/AudioUpload'
+import { apiClient, type UploadResponse, type CallStatusResponse } from '../services/api'
 
 interface AnalyseACallProps {
   /** Called when the user wants to view the analysis report. */
   onViewReport?: () => void
 }
 
+type AnalysisState = 
+  | { type: 'idle' }
+  | { type: 'uploading' }
+  | { type: 'polling'; callId: string }
+  | { type: 'completed'; callId: string }
+  | { type: 'error'; message: string }
+
 /**
  * Analyse a Call page.
  *
- * Lets the user select an audio file and shows a clear, non-deceptive message
- * when Start Analysis is clicked — because the backend is not connected.
- *
- * IMPORTANT:
- *  - No file is uploaded anywhere.
- *  - No progress is simulated.
- *  - No trust score or detection results are fabricated.
+ * Lets the user upload an audio file and tracks the analysis progress
+ * by polling the backend API.
  */
 export function AnalyseACall({ onViewReport }: AnalyseACallProps) {
   const [fileState, setFileState] = useState<AudioFileState | null>(null)
-  const [analysisAttempted, setAnalysisAttempted] = useState(false)
+  const [analysisState, setAnalysisState] = useState<AnalysisState>({ type: 'idle' })
+  const [currentStatus, setCurrentStatus] = useState<string>('')
 
   const hasValidFile = fileState !== null && fileState.error === null
 
-  function handleStartAnalysis() {
-    if (!hasValidFile) return
-    setAnalysisAttempted(true)
+  async function handleStartAnalysis() {
+    if (!hasValidFile || !fileState?.file) return
+
+    setAnalysisState({ type: 'uploading' })
+
+    try {
+      // Upload the file
+      const uploadResponse = await apiClient.uploadRecording(fileState.file)
+
+      if (!uploadResponse) {
+        setAnalysisState({ 
+          type: 'error', 
+          message: 'Upload failed. Please check backend connection and try again.' 
+        })
+        return
+      }
+
+      // Start polling for status
+      setAnalysisState({ type: 'polling', callId: uploadResponse.call_id })
+      setCurrentStatus(uploadResponse.status)
+      pollAnalysisStatus(uploadResponse.call_id)
+
+    } catch (error) {
+      console.error('Analysis error:', error)
+      setAnalysisState({ 
+        type: 'error', 
+        message: error instanceof Error ? error.message : 'Unknown error occurred' 
+      })
+    }
+  }
+
+  async function pollAnalysisStatus(callId: string) {
+    const maxAttempts = 60 // Poll for up to 60 seconds
+    let attempts = 0
+
+    const pollInterval = setInterval(async () => {
+      attempts++
+
+      if (attempts > maxAttempts) {
+        clearInterval(pollInterval)
+        setAnalysisState({ 
+          type: 'error', 
+          message: 'Analysis timeout. Please check the History page for results.' 
+        })
+        return
+      }
+
+      const status = await apiClient.getCallStatus(callId)
+
+      if (!status) {
+        // Continue polling even if one request fails
+        return
+      }
+
+      setCurrentStatus(status.status)
+
+      if (status.status === 'completed') {
+        clearInterval(pollInterval)
+        setAnalysisState({ type: 'completed', callId })
+      } else if (status.status === 'failed') {
+        clearInterval(pollInterval)
+        setAnalysisState({ 
+          type: 'error', 
+          message: status.error_message || 'Analysis failed' 
+        })
+      }
+    }, 1000) // Poll every second
   }
 
   function handleFileChange(state: AudioFileState | null) {
     setFileState(state)
-    // Clear the "attempted" banner when the user picks a new file or clears
-    if (analysisAttempted) setAnalysisAttempted(false)
+    // Reset analysis state when user picks a new file
+    if (analysisState.type !== 'idle') {
+      setAnalysisState({ type: 'idle' })
+    }
   }
+
+  function renderStatusMessage() {
+    switch (analysisState.type) {
+      case 'uploading':
+        return (
+          <div className="analysis-status analysis-status--uploading" role="status" aria-live="polite">
+            <LoaderIcon size={16} className="analysis-status__spinner" aria-hidden="true" />
+            <div className="analysis-status__text">
+              <strong>Uploading recording...</strong>
+            </div>
+          </div>
+        )
+
+      case 'polling':
+        return (
+          <div className="analysis-status analysis-status--processing" role="status" aria-live="polite">
+            <LoaderIcon size={16} className="analysis-status__spinner" aria-hidden="true" />
+            <div className="analysis-status__text">
+              <strong>Analysis in progress...</strong>
+              <span> Status: {currentStatus}</span>
+            </div>
+          </div>
+        )
+
+      case 'completed':
+        return (
+          <div className="analysis-status analysis-status--completed" role="status" aria-live="polite">
+            <CheckCircleIcon size={16} className="analysis-status__icon" aria-hidden="true" />
+            <div className="analysis-status__text">
+              <strong>Analysis complete!</strong>
+              <span> View the report to see results.</span>
+            </div>
+          </div>
+        )
+
+      case 'error':
+        return (
+          <div className="analysis-status analysis-status--error" role="alert" aria-live="assertive">
+            <AlertCircleIcon size={16} className="analysis-status__icon" aria-hidden="true" />
+            <div className="analysis-status__text">
+              <strong>Analysis failed:</strong>
+              <span> {analysisState.message}</span>
+            </div>
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }
+
+  const isAnalyzing = analysisState.type === 'uploading' || analysisState.type === 'polling'
+  const canViewReport = analysisState.type === 'completed'
 
   return (
     <div className="page-content">
@@ -70,30 +193,34 @@ export function AnalyseACall({ onViewReport }: AnalyseACallProps) {
           inputId="analyse-audio-file-input"
           fileState={fileState}
           onFileChange={handleFileChange}
+          disabled={isAnalyzing}
         />
 
-        {/* Backend unavailable notice shown after user clicks Start Analysis */}
-        {analysisAttempted && (
-          <div className="analysis-unavailable-notice" role="alert" aria-live="assertive">
-            <AlertCircleIcon size={16} aria-hidden="true" className="analysis-unavailable-notice__icon" />
-            <div className="analysis-unavailable-notice__text">
-              <strong>Analysis is unavailable until the backend is connected.</strong>
-              <span> No analysis has been performed.</span>
-            </div>
-          </div>
-        )}
+        {/* Status message */}
+        {renderStatusMessage()}
 
         {/* Primary action */}
         <div className="analyse-actions">
           <button
             className="btn-primary"
-            disabled={!hasValidFile}
+            disabled={!hasValidFile || isAnalyzing}
             onClick={handleStartAnalysis}
-            aria-disabled={!hasValidFile}
+            aria-disabled={!hasValidFile || isAnalyzing}
           >
-            Start Analysis
+            {isAnalyzing ? 'Analysing...' : 'Start Analysis'}
           </button>
-          {onViewReport && (
+          
+          {canViewReport && onViewReport && (
+            <button
+              className="btn-primary"
+              onClick={onViewReport}
+              aria-label="View analysis report"
+            >
+              View Report
+            </button>
+          )}
+
+          {onViewReport && !canViewReport && (
             <button
               className="btn-ghost btn-ghost--sm"
               onClick={onViewReport}
@@ -102,7 +229,8 @@ export function AnalyseACall({ onViewReport }: AnalyseACallProps) {
               View Report Layout
             </button>
           )}
-          {!hasValidFile && (
+          
+          {!hasValidFile && !isAnalyzing && (
             <p className="analyse-actions__hint">
               {fileState?.error
                 ? 'Fix the file error above to continue.'
@@ -115,11 +243,12 @@ export function AnalyseACall({ onViewReport }: AnalyseACallProps) {
       {/* Informational note */}
       <aside className="info-card" aria-label="Important note">
         <p className="info-card__text">
-          <strong>Frontend-only mode:</strong> This interface does not upload recordings, simulate
-          analysis progress, or generate detection results. Voice-authenticity analysis requires a
-          connected backend service.
+          <strong>Backend Integration:</strong> This interface uploads recordings to the VISHWAS backend
+          for real-time voice authenticity analysis. Results are based on the configured analysis mode
+          (mock or real).
         </p>
       </aside>
     </div>
   )
 }
+

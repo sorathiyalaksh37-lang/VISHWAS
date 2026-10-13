@@ -42,14 +42,16 @@ $backendReady = $false
 
 while ($attempt -lt $maxAttempts -and -not $backendReady) {
     Start-Sleep -Seconds 1
+    $attempt++
     try {
         $response = Invoke-WebRequest -Uri "http://localhost:8000/api/v1/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
         if ($response.StatusCode -eq 200) {
             $backendReady = $true
             Write-Host "  ✓ Backend ready!" -ForegroundColor Green
+        } else {
+            Write-Host "  ⏳ Attempt $attempt/$maxAttempts..." -ForegroundColor Gray
         }
     } catch {
-        $attempt++
         Write-Host "  ⏳ Attempt $attempt/$maxAttempts..." -ForegroundColor Gray
     }
 }
