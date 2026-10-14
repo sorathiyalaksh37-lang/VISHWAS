@@ -84,3 +84,19 @@ build/
 *.key
 secrets.json
 credentials.json
+
+# Local env & secrets
+backend/.env
+backend/.env.bak
+backend/vishwas.db*
+backend/venv/
+backend/storage/
+backend/__pycache__/
+android-app/.gradle/
+android-app/.idea/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+*.token
+vishwas_token.txt
+token.txt

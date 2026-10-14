@@ -44,7 +44,20 @@ class VishwasRepository(private val context: Context) {
         withContext(Dispatchers.IO) {
             try {
                 // Copy URI content to temp file
-                val tempFile = File(context.cacheDir, "upload_$filename")
+                val resolvedName = run {
+                    var displayName: String? = null
+                    context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                        val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0 && c.moveToFirst()) displayName = c.getString(idx)
+                    }
+                    val base = displayName ?: filename
+                    if (base.contains('.')) base else {
+                        val ext = android.webkit.MimeTypeMap.getSingleton()
+                            .getExtensionFromMimeType(context.contentResolver.getType(uri)) ?: "mp3"
+                        "$base.$ext"
+                    }
+                }
+                val tempFile = File(context.cacheDir, "upload_$resolvedName")
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     tempFile.outputStream().use { output ->
                         input.copyTo(output)
@@ -53,7 +66,7 @@ class VishwasRepository(private val context: Context) {
                 
                 // Create multipart body
                 val requestBody = tempFile.asRequestBody("audio/*".toMediaTypeOrNull())
-                val filePart = MultipartBody.Part.createFormData("file", filename, requestBody)
+                val filePart = MultipartBody.Part.createFormData("file", resolvedName, requestBody)
                 
                 // Upload
                 val response = api.uploadRecording(filePart)
