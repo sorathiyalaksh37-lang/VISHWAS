@@ -3475,7 +3475,16 @@
 }
 .modal-input::placeholder { color: var(--color-text-muted); opacity: 0.6; }
 select.modal-input { cursor: pointer; }
-select.modal-input option { background: #111827; color: var(--color-text); }
+select.modal-input option { 
+  background: var(--color-panel); 
+  color: var(--color-text); 
+}
+
+/* Light mode specific fixes */
+:root[data-theme="light"] select.modal-input option {
+  background: #FFFFFF;
+  color: #111827;
+}
 
 /* ── Contact List Items ──────────────────────────────────────────── */
 .contact-list-item {
