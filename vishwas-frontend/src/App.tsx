@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import { useAuth } from './contexts/AuthContext'
-import { LoginPage } from './pages/LoginPage'
+import { AuthProvider } from './contexts/AuthContext'
 import { Shell } from './components/layout/Shell'
 import { AnalyseACall } from './pages/AnalyseACall'
 import { AnalysisReport } from './pages/AnalysisReport'
 import { CallHistory } from './pages/CallHistory'
 import { Overview } from './pages/Overview'
+import { LiveAnalysisPage } from './pages/LiveAnalysisPage'
 import { PrivacySettings } from './pages/PrivacySettings'
 import { TrustGraphPage } from './pages/TrustGraphPage'
 import { VoiceDetectionPage } from './pages/VoiceDetectionPage'
@@ -27,17 +27,7 @@ function readCompactPref(): boolean {
   return false
 }
 
-/**
- * Root application component.
- *
- * Reads the compact-layout preference on mount and applies
- * data-compact="true" to <html> so the CSS selector in index.css activates.
- *
- * Navigation state lives here. `showReport` tracks whether the inline
- * report sub-view is active on the Analyse a Call page.
- */
-function App() {
-  const { isAuthenticated, isLoading } = useAuth()
+function AppContent() {
   const [activeItem, setActiveItem] = useState<NavItem>('overview')
   const [showReport, setShowReport] = useState(false)
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
@@ -81,6 +71,16 @@ function App() {
         return <Overview onNavigate={handleNavigate} />
       case 'trust-graph':
         return <TrustGraphPage />
+      case 'live':
+        return (
+          <LiveAnalysisPage
+            onViewReport={(callId) => {
+              setSelectedCallId(callId)
+              setShowReport(true)
+              setActiveItem('analyse')
+            }}
+          />
+        )
       case 'analyse':
         return showReport ? (
           <AnalysisReport callId={selectedCallId || undefined} onBack={() => setShowReport(false)} />
@@ -99,7 +99,6 @@ function App() {
         return <PrivacySettings />
     }
   }
-
   // AUTHENTICATION DISABLED - Direct access to dashboard
   // Show main app without authentication
   return (
@@ -109,4 +108,10 @@ function App() {
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  )
+}

@@ -11,8 +11,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.database.session import init_db
-from app.api.routes import health, calls, auth
-from app.api.routes import analyze
+from app.api.routes import health, calls, auth, analyze, live_analysis
 
 # Setup logging
 logger = setup_logging()
@@ -103,6 +102,7 @@ app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 app.include_router(auth.router, prefix="/api/v1", tags=["Authentication"])  # Phase 7
 app.include_router(analyze.router, prefix="/api/v1", tags=["Analysis"])  # M2 routes
 app.include_router(calls.router, prefix="/api/v1", tags=["Calls (legacy)"])  # backward compat
+app.include_router(live_analysis.router, prefix="/api/v1", tags=["Live Analysis"])
 
 
 @app.exception_handler(Exception)

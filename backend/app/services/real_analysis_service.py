@@ -20,6 +20,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from sqlalchemy.orm import Session
 
 from app.audio.preprocessor import convert_to_wav, validate_audio
 from app.audio.asr_service import get_asr_service, ASRResult
@@ -73,7 +74,21 @@ class RealAnalysisService:
         """Initialize real analysis service."""
         self.analysis_mode = "real"
 
-    def analyze_call(self, call_id: str) -> None:
+    def _preliminary_risk(self, ev) -> tuple[float, str]:
+        """Compute preliminary risk score from voice evidence alone."""
+        if not ev or getattr(ev, "status", None) != "ok":
+            return 0.0, "low"
+        spoof_prob = getattr(ev, "spoof_prob", 0.0) or 0.0
+        if spoof_prob >= 0.80:
+            return 10.0, "critical"
+        elif spoof_prob >= 0.60:
+            return 5.0, "high"
+        elif spoof_prob >= 0.40:
+            return 2.5, "medium"
+        else:
+            return 0.0, "low"
+
+    async def analyze_call(self, call_id: str, db: Optional[Session] = None) -> None:
         """
         Full analysis pipeline for a single call.
         Designed to run as a FastAPI BackgroundTask.
@@ -91,9 +106,12 @@ class RealAnalysisService:
           7. Persist results
           8. Mark call as 'completed' or 'failed'
         """
-        # Create a new database session for the background task
-        from app.database.session import SessionLocal
-        db = SessionLocal()
+        close_db = False
+        if db is None:
+            # Create a new database session for the background task
+            from app.database.session import SessionLocal
+            db = SessionLocal()
+            close_db = True
         wav_path: Optional[Path] = None
 
         try:
@@ -261,23 +279,75 @@ class RealAnalysisService:
                 )
 
                 trust_graph = TrustGraph(db)
+                trust_context_data = trust_graph.get_trust_context(
+                    caller_number=None,
+                    claimed_identity=(
+                        evidence.claims.primary_claim.value
+                        if evidence.claims.primary_claim else None
+                    ),
+                    claimed_relation=(
+                        evidence.claims.primary_claim.type
+                        if evidence.claims.primary_claim else None
+                    ),
+                )
+                channel_status = trust_context_data.get("channel_status", "UNKNOWN")
+
+                # ── Parameter-based scoring path ──────────────────────────────
+                from app.extractors.parameter_extractor import build_call_parameters
+                from app.trust_engine.parameter_scorer import score_from_parameters
+
+                # Convert raw voice_dict -> VoiceEvidence schema if available
+                _voice_schema_evidence = None
+                if voice_dict and voice_dict.get("status") == "ok":
+                    try:
+                        from app.schemas.evidence import VoiceEvidence as _VE
+                        _voice_schema_evidence = _VE(**voice_dict)
+                    except Exception:
+                        pass
+
+                call_params = build_call_parameters(
+                    transcript=transcript_response,
+                    call_id=call_id,
+                    evidence=evidence,
+                    voice_evidence=_voice_schema_evidence,
+                    caller_number=None,
+                    channel_status=channel_status,
+                    trust_context=trust_context_data,
+                )
+                warnings.extend(call_params.extraction_warnings)
+
+                score_breakdown = score_from_parameters(call_params)
+
+                # Feed the ScoreBreakdown into TrustJudge's assessment builder
+                from app.trust_engine.judge import TrustJudge, RiskAssessment
                 judge = TrustJudge()
+                # Use judge only for verification recommendation + killchain
+                # (scoring already done deterministically above)
                 assessment = judge.evaluate(
                     call_id=call_id,
                     evidence=evidence,
                     trust_graph=trust_graph,
-                    caller_number=None
+                    caller_number=None,
                 )
-
-                risk_score = assessment.score
-                risk_level = assessment.risk_level
-                reasons = assessment.reasons
+                # Override with parameter-based score (more accurate)
+                risk_score = score_breakdown.final_score
+                risk_level = score_breakdown.risk_level.value
+                reasons = score_breakdown.reasons + [
+                    r for r in assessment.reasons if r not in score_breakdown.reasons
+                ]
                 warnings.extend(assessment.warnings)
-                fired_rules_list = assessment.fired_rules
+                fired_rules_list = list(set(
+                    score_breakdown.fired_rules + assessment.fired_rules
+                ))
                 killchain_stage = assessment.killchain_stage
 
-                # Category scores
-                category_scores_dict = assessment.category_scores
+                category_scores_dict = {
+                    "identity": score_breakdown.identity,
+                    "request": score_breakdown.request,
+                    "behavior": score_breakdown.behavior,
+                    "channel": score_breakdown.channel,
+                    "voice": score_breakdown.voice,
+                }
 
                 # Verification
                 if assessment.verification_details:
@@ -476,8 +546,9 @@ class RealAnalysisService:
                     wav_path.unlink()
                 except Exception:
                     pass
-            # Always close the database session
-            db.close()
+            # Close the database session if created internally
+            if close_db:
+                db.close()
 
     @staticmethod
     def _basic_text_analysis(
@@ -520,15 +591,15 @@ class RealAnalysisService:
 
         # Urgency tactics
         urgency_patterns = [
-            ("immediately", "Urgency: 'immediately'"),
-            ("urgent", "Urgency tactic"),
-            ("right now", "Urgency: 'right now'"),
+            ("immediately", "Urgent / immediate demand"),
+            ("urgent", "Urgent pressure tactic"),
+            ("right now", "Urgent: 'right now'"),
             ("limited time", "Limited time pressure"),
             ("will be blocked", "Account blocking threat"),
             ("will be suspended", "Account suspension threat"),
             ("will be closed", "Account closure threat"),
-            ("act fast", "Urgency: 'act fast'"),
-            ("hurry", "Urgency: 'hurry'"),
+            ("act fast", "Urgent: 'act fast'"),
+            ("hurry", "Urgent: 'hurry'"),
         ]
         for pattern, label in urgency_patterns:
             if pattern in text_lower:
@@ -581,6 +652,8 @@ class RealAnalysisService:
             ("upi", "UPI transfer request"),
             ("google pay", "Payment app request"),
             ("paytm", "Payment app request"),
+            ("rupees", "Money transfer request (rupees)"),
+            ("transfer", "Money transfer request"),
         ]
         for pattern, label in money_patterns:
             if pattern in text_lower:

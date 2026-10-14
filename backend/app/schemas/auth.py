@@ -1,22 +1,37 @@
-"""
-Authentication schemas for request/response validation.
-"""
-from pydantic import BaseModel, EmailStr, Field
+import re
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
 
+def _check_email(v: str) -> str:
+    # Use a permissive regex that accepts local/reserved domains (e.g. .local, .internal)
+    if not isinstance(v, str) or not re.match(r"^[^@\s]+@[^@\s]+$", v):
+        raise ValueError("Invalid email address format")
+    return v
+
+
 class UserCreate(BaseModel):
     """Schema for user registration."""
-    email: EmailStr
+    email: str = Field(..., max_length=255, description="User email address")
     password: str = Field(..., min_length=6, max_length=100)
     full_name: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _check_email(v)
 
 
 class UserLogin(BaseModel):
     """Schema for user login."""
-    email: EmailStr
+    email: str = Field(..., max_length=255, description="User email address")
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _check_email(v)
 
 
 class Token(BaseModel):

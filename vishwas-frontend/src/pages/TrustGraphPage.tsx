@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
-  UsersIcon, PlusIcon, ShieldCheckIcon, UserIcon, BuildingIcon,
-  HelpCircleIcon, ClockIcon, MicIcon, CheckCircle2Icon, XCircleIcon,
+  UsersIcon, PlusIcon, UserIcon, BuildingIcon,
+  ClockIcon, MicIcon, CheckCircle2Icon, XCircleIcon,
   LoaderIcon, SearchIcon, RefreshCwIcon, PhoneIcon, UploadIcon,
   AlertCircleIcon,
 } from 'lucide-react'
@@ -55,12 +55,6 @@ function trustColor(trust: string | undefined): string {
   }
 }
 
-function relationColor(rel: string | null): string {
-  const r = (rel || '').toLowerCase()
-  if (['bank', 'institution'].some(k => r.includes(k))) return '#06b6d4'
-  return '#10b981'
-}
-
 // ── Force-directed graph layout ───────────────────────────────────────────────
 
 function layoutNodes(contacts: Contact[], width: number, height: number): GraphNode[] {
@@ -111,7 +105,6 @@ function TrustGraphCanvas({
 
     // Draw edges
     nodesRef.current.forEach(n => {
-      const tc = trustColor(n.trust_level)
       ctx.beginPath()
       ctx.moveTo(cx, cy)
       ctx.lineTo(n.x, n.y)

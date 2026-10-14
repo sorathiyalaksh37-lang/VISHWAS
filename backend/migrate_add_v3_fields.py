@@ -36,6 +36,7 @@ def migrate():
         
         # Add missing columns
         migrations = [
+            ("voice_json", "ALTER TABLE analysis_reports ADD COLUMN voice_json TEXT"),
             ("category_scores_json", "ALTER TABLE analysis_reports ADD COLUMN category_scores_json TEXT"),
             ("fired_rules_json", "ALTER TABLE analysis_reports ADD COLUMN fired_rules_json TEXT"),
             ("verification_json", "ALTER TABLE analysis_reports ADD COLUMN verification_json TEXT"),

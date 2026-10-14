@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   AlertTriangleIcon, ArrowLeftIcon, CheckCircle2Icon,
-  ClockIcon, FileAudioIcon, FileTextIcon,
-  MicVocalIcon, PhoneOffIcon, ShieldIcon, ShieldOffIcon,
+  FileAudioIcon, FileTextIcon,
+  PhoneOffIcon, ShieldIcon,
   WavesIcon, ZapIcon, InfoIcon, XCircleIcon,
   BrainCircuitIcon, GitMergeIcon, MessageSquareIcon,
   ActivityIcon, PhoneIcon, ExternalLinkIcon, ChevronDownIcon,
@@ -231,7 +231,7 @@ function FindingCard({ finding, index }: { finding: AnalysisReportResponse['agen
 
 // ── Helper: transcript segment ────────────────────────────────────────────────
 
-function TranscriptSegment({ seg, index }: {
+function TranscriptSegment({ seg, index: _index }: {
   seg: { speaker?: string | null; text: string; start: number; end: number; language?: string | null }
   index: number
 }) {
@@ -317,7 +317,7 @@ interface AnalysisReportProps {
   onBack?: () => void
 }
 
-export function AnalysisReport({ callId, recordingName, onBack }: AnalysisReportProps) {
+export function AnalysisReport({ callId, recordingName: _recordingName, onBack }: AnalysisReportProps) {
   const [report, setReport] = useState<AnalysisReportResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1012,8 +1012,7 @@ export function AnalysisReport({ callId, recordingName, onBack }: AnalysisReport
                   { label: 'Mode', value: report.analysis_mode.toUpperCase() },
                   { label: 'Language', value: report.language ?? 'EN' },
                   { label: 'Created', value: new Date(report.created_at).toLocaleString() },
-                  report.completed_at ? { label: 'Completed', value: new Date(report.completed_at).toLocaleString() } : null,
-                ].filter(Boolean).map(({ label, value }) => (
+                ].filter((item): item is { label: string; value: string } => item !== null).map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                     <dt style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, flexShrink: 0 }}>{label}</dt>
                     <dd style={{ fontSize: '0.75rem', color: 'var(--color-text)', fontFamily: 'var(--font-mono)', textAlign: 'right', wordBreak: 'break-all' }}>

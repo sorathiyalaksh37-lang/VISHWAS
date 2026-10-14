@@ -63,6 +63,12 @@ def extract_evidence_from_transcript(
         logger.warning(f"Empty transcript for call {call_id}")
         return _create_empty_evidence(call_id, voice_evidence)
     
+    # For completed transcripts, unspecified finality is committed
+    if getattr(transcript, "transcription_status", None) == "completed":
+        for seg in transcript.segments:
+            if seg.is_final is None:
+                seg.is_final = True
+
     # Initialize classifier and PII masker
     classifier = Tier1Classifier()
     classifier.reset_session()  # Ensure clean state

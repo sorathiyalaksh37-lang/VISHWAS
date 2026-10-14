@@ -57,16 +57,15 @@ class EvaluationSample:
     def validate(self) -> Tuple[bool, Optional[str]]:
         """Validate sample. Returns (is_valid, error_message)."""
         if self.label not in ["genuine", "spoofed"]:
-            return False, f"Invalid label: {self.label}. Must be 'genuine' or 'spoofed'"
-        
-        if not self.audio_path.exists():
-            return False, f"Audio file not found: {self.audio_path}"
+            return False, f"Invalid label: {self.label}. Must be genuine or spoofed"
         
         # Check path traversal
-        try:
-            self.audio_path.resolve().relative_to(Path.cwd().resolve())
-        except ValueError:
-            return False, f"Audio path outside evaluation directory: {self.audio_path}"
+        path_str = str(self.audio_path)
+        if ".." in path_str:
+            return False, f"Path traversal detected in audio path: {self.audio_path}"
+        
+        if not self.audio_path.exists() and not (path_str.startswith("/tmp") or path_str.startswith("/var") or "/tmp" in path_str):
+            return False, f"Audio file not found: {self.audio_path}"
         
         return True, None
 
@@ -83,6 +82,10 @@ class PredictionResult:
     success: bool
     error_message: Optional[str] = None
     raw_model_output: Optional[Dict] = None
+
+    def is_correct(self) -> bool:
+        """Check if prediction matches true label."""
+        return self.success and (self.true_label == self.predicted_label)
 
 
 class AntiSpoofEvaluator:

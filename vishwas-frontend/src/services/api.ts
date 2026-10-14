@@ -7,7 +7,7 @@
 
 // ── API Configuration ──────────────────────────────────────────────────────────
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 // ── Auth Token Management ──────────────────────────────────────────────────────
 
@@ -107,11 +107,18 @@ export interface Verification {
   safe_word_prompt: boolean | null
 }
 
+export interface SpeakerMatch {
+  enrolled?: boolean
+  similarity?: number | null
+  claimed_contact?: string | null
+  [key: string]: unknown
+}
+
 export interface VoiceEvidence {
   status: string | null
   spoof_prob: number | null
   windows_analyzed: number | null
-  speaker_match: Record<string, unknown> | null
+  speaker_match: SpeakerMatch | null
   quality: Record<string, unknown> | null
   model: string | null
 }
@@ -136,6 +143,58 @@ export interface AnalysisReportResponse {
   warnings: string[]
   created_at: string
   completed_at?: string | null
+}
+
+export interface LiveSessionStartRequest {
+  mode: 'webrtc' | 'cellular' | 'non_audio'
+  audio_authorized?: boolean
+  caller_number?: string
+  claimed_identity?: string
+  claimed_relationship?: string
+}
+
+export interface LiveSessionStartResponse {
+  session_id: string
+  mode: 'webrtc' | 'cellular' | 'non_audio'
+  audio_authorized: boolean
+  websocket_url: string
+  created_at: string
+}
+
+export interface LiveTranscriptSegment {
+  start: number
+  end: number
+  speaker: string
+  text: string
+  is_final: boolean
+  confidence?: number
+}
+
+export interface LiveSessionState {
+  session_id: string
+  mode: 'webrtc' | 'cellular' | 'non_audio'
+  state: 'active' | 'completed' | 'cancelled'
+  audio_authorized: boolean
+  caller_number?: string | null
+  claimed_identity?: string | null
+  claimed_relationship?: string | null
+  current_score: number
+  current_level: string
+  voice_status: string
+  voice_spoof_prob?: number | null
+  windows_analyzed: number
+  transcript_segments: LiveTranscriptSegment[]
+  fired_rules: string[]
+  reasons: string[]
+  warnings: string[]
+  recommended_actions: string[]
+  created_at: string
+}
+
+export interface SubmitNonAudioMessageRequest {
+  text: string
+  speaker?: string
+  timestamp_s?: number
 }
 
 export interface CallListItem {
@@ -194,9 +253,9 @@ class APIClient {
   /**
    * Get headers for authenticated requests.
    */
-  private getAuthHeaders(): HeadersInit {
+  private getAuthHeaders(): Record<string, string> {
     const token = getAuthToken()
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Accept': 'application/json',
     }
     
@@ -539,6 +598,118 @@ class APIClient {
     } catch (error) {
       console.error('List calls error:', error)
       return null
+    }
+  }
+
+  /**
+   * Derive WebSocket URL for live session analysis.
+   */
+  getLiveWebSocketUrl(sessionId?: string): string {
+    const loc = window.location
+    const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = this.baseURL.startsWith('http')
+      ? this.baseURL.replace(/^https?:\/\//, '').split('/')[0]
+      : loc.host
+    const path = this.baseURL.startsWith('http')
+      ? `${this.baseURL.replace(/^https?:\/\/[^/]+/, '')}/live/ws/analyze`
+      : `${this.baseURL}/live/ws/analyze`
+    const token = getAuthToken()
+    let url = `${wsProto}//${host}${path}`
+    const params: string[] = []
+    if (token) params.push(`token=${encodeURIComponent(token)}`)
+    if (sessionId) params.push(`session_id=${encodeURIComponent(sessionId)}`)
+    if (params.length > 0) {
+      url += `?${params.join('&')}`
+    }
+    return url
+  }
+
+  /**
+   * Start a new live call fraud analysis session.
+   */
+  async startLiveSession(req: LiveSessionStartRequest): Promise<LiveSessionStartResponse | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/live/sessions`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(req),
+      })
+      if (!response.ok) {
+        console.error(`Start live session failed: ${response.status}`)
+        return null
+      }
+      return await response.json()
+    } catch (error) {
+      console.error('Start live session error:', error)
+      return null
+    }
+  }
+
+  /**
+   * Retrieve state of an active or recent live session.
+   */
+  async getLiveSessionState(sessionId: string): Promise<LiveSessionState | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/live/sessions/${sessionId}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      })
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      console.error('Get live session error:', error)
+      return null
+    }
+  }
+
+  /**
+   * Submit a non-audio message during a live session.
+   */
+  async submitLiveMessage(sessionId: string, req: SubmitNonAudioMessageRequest): Promise<LiveSessionState | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/live/sessions/${sessionId}/message`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(req),
+      })
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      console.error('Submit live message error:', error)
+      return null
+    }
+  }
+
+  /**
+   * Conclude and finalize a live session, persisting to database.
+   */
+  async stopLiveSession(sessionId: string): Promise<CallStatusResponse | null> {
+    try {
+      const response = await fetch(`${this.baseURL}/live/sessions/${sessionId}/stop`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+      })
+      if (!response.ok) return null
+      return await response.json()
+    } catch (error) {
+      console.error('Stop live session error:', error)
+      return null
+    }
+  }
+
+  /**
+   * Cancel and discard a live session.
+   */
+  async cancelLiveSession(sessionId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseURL}/live/sessions/${sessionId}/cancel`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+      })
+      return response.status === 204
+    } catch (error) {
+      console.error('Cancel live session error:', error)
+      return false
     }
   }
 }

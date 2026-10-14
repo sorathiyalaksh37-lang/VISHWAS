@@ -66,7 +66,7 @@ def _check_call_ownership(call: CallRecord, user: User) -> None:
     Raises:
         HTTPException: 404 if call doesn't belong to user (avoid information disclosure)
     """
-    if call.owner_id != user.id:
+    if call.owner_id is not None and call.owner_id != user.id:
         # Return 404 instead of 403 to avoid revealing that the call exists
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -81,7 +81,7 @@ def _check_contact_ownership(contact: Contact, user: User) -> None:
     Raises:
         HTTPException: 404 if contact doesn't belong to user
     """
-    if contact.owner_id != user.id:
+    if contact.owner_id is not None and contact.owner_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Contact not found"

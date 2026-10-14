@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 PII_PATTERNS: Dict[str, Tuple[str, str]] = {
     # CVV/PIN/OTP (must come first, most specific)
     "cvv": (
-        r"\b(?:cvv|pin|otp)[\s:]+\d{3,6}\b",
+        r"\b(?:cvv|pin|otp)(?:\s+(?:is|number|code))?[\s:]+\d{3,6}\b",
         "[MASKED_CVV]"
     ),
     

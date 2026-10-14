@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./vishwas.db"
     
     # Authentication (Phase 7)
-    secret_key: Optional[str] = None  # REQUIRED in production - set via environment
+    secret_key: Optional[str] = "vishwas-dev-secret-key-32-chars-long-123456"
     
     # Storage
     upload_dir: str = "./storage/uploads"
@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     tier2_max_retries: int = 2
     tier2_max_input_tokens: int = 4000
     tier2_max_output_tokens: int = 2000
+
+    # Parameter extraction LLM (Phase — Qwen2.5-3B-Instruct)
+    llm_extraction_enabled: bool = False          # Set True to enable local Qwen
+    llm_model_id: str = "Qwen/Qwen2.5-3B-Instruct"
+    llm_model_revision: str = "main"
+    llm_extraction_timeout: float = 60.0         # Per-call timeout in seconds
 
     # Logging
     log_level: str = "INFO"

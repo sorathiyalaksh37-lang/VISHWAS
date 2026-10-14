@@ -5,6 +5,7 @@ import {
   GitFork,
   LogOut,
   MicVocalIcon,
+  Radio,
   Settings2,
   ShieldCheckIcon,
   User,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
-export type NavItem = 'overview' | 'trust-graph' | 'analyse' | 'history' | 'voice-detection' | 'settings'
+export type NavItem = 'overview' | 'trust-graph' | 'analyse' | 'live' | 'history' | 'voice-detection' | 'settings'
 
 interface NavEntry {
   id: NavItem
@@ -30,6 +31,11 @@ const NAV_ITEMS: NavEntry[] = [
     id: 'trust-graph',
     label: 'Trust Graph',
     icon: <GitFork size={18} aria-hidden="true" />,
+  },
+  {
+    id: 'live',
+    label: 'Live Monitor',
+    icon: <Radio size={18} aria-hidden="true" />,
   },
   {
     id: 'analyse',

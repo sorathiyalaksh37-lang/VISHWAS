@@ -70,17 +70,34 @@ class DetectionPatterns:
     
     CREDENTIAL_REQUESTS: Dict[str, PatternList] = {
         "otp": [
-            # Requests to share/tell OTP
+            # ── Standard OTP requests (English) ────────────────────────────
             (r"\b(tell|bata|batao|bataiye|share|bhej|send|give|do|provide|enter)\s+(me\s+)?(your|apna|tumhara|aapka)?\s*(otp|one time password|verification code|code|o\.?\s*t\.?\s*p\.?)\b", "CRED_OTP_REQ_1", 0.95),
             (r"\b(otp|verification code|code|o\.?\s*t\.?\s*p\.?)\s+(bata|batao|bataiye|tell|share|bhej|send|give|do|provide)\b", "CRED_OTP_REQ_2", 0.95),
             (r"\b(what|kya|konsa)\s+(is|hai)\s+(your|tumhara|aapka)\s+(otp|verification code|code)\b", "CRED_OTP_REQ_3", 0.95),
             (r"\b(otp|code)\s+(kya|what)\s+(hai|is|aya|aaya|received)\b", "CRED_OTP_REQ_HI_1", 0.95),
-            (r"\b(please\s+)?(read|padho|batao|batao|bolo)\s+(the\s+)?(otp|code|verification)\b", "CRED_OTP_REQ_4", 0.95),
+            (r"\b(please\s+)?(read|padho|batao|bolo)\s+(the\s+)?(otp|code|verification)\b", "CRED_OTP_REQ_4", 0.95),
             (r"\b(apna|aapka|your)\s+(otp|code)\s+(bataiye|batao|bata|tell)\b", "CRED_OTP_REQ_5", 0.95),
-            
             # Contextual OTP requests
             (r"\b(need|chahiye|zarurat)\s+(your|tumhara|aapka)\s+(otp|code|verification)\b", "CRED_OTP_REQ_6", 0.9),
             (r"\b(verify|confirm|check)\s+(your|tumhara)\s+(otp|code)\b", "CRED_OTP_REQ_7", 0.85),
+
+            # ── Phase 5A: Telephony / Hinglish / Phonetic OTP variations ───
+            # Spaced-letter spelling: "O T P" as spoken letter-by-letter
+            (r"\b(O\s+T\s+P)\b", "CRED_OTP_SPACED_1", 0.9),
+            # Phonetic English: "oh tee pee"
+            (r"\b(oh\s+tee\s+pee)\b", "CRED_OTP_PHONETIC_1", 0.9),
+            # Hindi Unicode: ओटीपी
+            (r"(ओटीपी|ओ\s*टी\s*पी)", "CRED_OTP_HINDI_1", 0.95),
+            # Hinglish request: "OTP bata do", "OTP share karo"
+            (r"\b(otp|ओटीपी)\s+(bata|batao|share|de|dena|bhejo|bol)\b", "CRED_OTP_HINGLISH_1", 0.95),
+            (r"\b(otp|ओटीपी)\s+(bata\s+do|bata\s+dijiye|share\s+karo|share\s+karna)\b", "CRED_OTP_HINGLISH_2", 0.95),
+            # Contextual: code on phone / message
+            (r"\b(code|number)\s+(jo|jो)\s+(aaya|aya|aai|aayi)\s+(phone|mobile|message|sms)\s+(pe|par|mein|me)\b", "CRED_OTP_CTX_1", 0.9),
+            (r"\b(phone|mobile)\s+(pe|par)\s+(aaya|aya)\s+(code|number|otp)\b", "CRED_OTP_CTX_2", 0.9),
+            # Contextual English: "share the code on your phone / received on mobile"
+            (r"\b(share|tell)\s+(the\s+)?(code|number)\s+(on|received\s+on)\s+(your\s+)?(phone|mobile)\b", "CRED_OTP_CTX_3", 0.9),
+            # Aadhaar OTP
+            (r"\b(aadhar|aadhaar|aadhar\s+otp|aadhaar\s+otp)\s+(bata|share|tell|do|dena)\b", "CRED_OTP_AADHAAR_1", 0.95),
         ],
         
         "pin": [
@@ -112,8 +129,19 @@ class DetectionPatterns:
         
         "kyc_details": [
             # KYC information
-            (r"\b(need|chahiye|verify|update|complete)\s+(your|apna|tumhara)?\s*(kyc|documents|pan|aadhar|details)\b", "CRED_KYC_REQ_1", 0.85),
-            (r"\b(kyc|pan|aadhar)\s+(update|verify|complete|pending|expired)\b", "CRED_KYC_REQ_2", 0.85),
+            (r"\b(need|chahiye|verify|update|complete)\s+(your|apna|tumhara)?\s*(kyc|documents|pan|aadhar|aadhaar|details)\b", "CRED_KYC_REQ_1", 0.85),
+            (r"\b(kyc|pan|aadhar|aadhaar)\s+(update|verify|complete|pending|expired|karna|karein)\b", "CRED_KYC_REQ_2", 0.85),
+            # Standalone: "Your KYC is pending" / "KYC pending hai"
+            (r"\b(your|tumhara|aapka)?\s*(kyc|pan|aadhar|aadhaar)\s+(is\s+)?(pending|expired|incomplete|required)\b", "CRED_KYC_REQ_3", 0.85),
+            # Hinglish KYC
+            (r"\b(aapka|tumhara|apna)\s+(kyc|pan|aadhar)\s+(pending|expired|incomplete|update)\s+(hai|he)\b", "CRED_KYC_HI_1", 0.85),
+        ],
+
+        "upi_request": [
+            # Phase 5A: UPI-specific credential requests
+            (r"\b(upi|paytm|phonepe|gpay|bhim)\s+(id|pin|vpa|handle)\s+(bata|share|tell|send|do)\b", "CRED_UPI_REQ_1", 0.95),
+            (r"\b(share|bata|tell|give)\s+(your|apna|tumhara)?\s*(upi\s+)(id|pin|handle|vpa)\b", "CRED_UPI_REQ_2", 0.95),
+            (r"\b(upi\s+id|upi\s+pin)\s+(kya|what)\s+(hai|is)\b", "CRED_UPI_REQ_3", 0.95),
         ],
     }
     
@@ -205,10 +233,16 @@ class DetectionPatterns:
     # ========================================================================
     
     NEGATION_CONTEXT = [
-        r"\b(never|kabhi nahi|mat|don'?t|nahi)\s+",
-        r"\b(should not|shouldn'?t|nahi karna|mat karna)\s+",
-        r"\b(will not|won'?t|nahi)\s+(ask|puch|request|share)\s+",
+        r"\b(never|kabhi nahi|kabhi nahin|mat|don'?t|nahi|nahin)\s+",
+        r"\b(should not|shouldn'?t|nahi karna|mat karna|nahi dena|mat dena)\s+",
+        r"\b(will not|won'?t|nahi)\s+(ask|puch|request|share|bata|tell)\s+",
         r"\b(do not|don'?t|mat)\s+(give|share|bata|tell)\s+(your|apna|tumhara)\s+",
+        # Educational / warning context
+        r"\b(bank|sbi|hdfc|icici|axis|rbi|government)\s+(never|kabhi nahi|will never|kabhi nahin)\s+(ask|puchega|mangega)\b",
+        r"\b(never|mat)\s+(share|batao|bato|bata)\s+(your|apna|aapka|tumhara)\s+",
+        # Quoted speech markers — text inside quotes is not a real request
+        r'"[^"]{0,200}(otp|pin|cvv|password)[^"]{0,200}"',
+        r"'[^']{0,200}(otp|pin|cvv|password)[^']{0,200}'",
     ]
     
     # ========================================================================

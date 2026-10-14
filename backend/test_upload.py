@@ -2,8 +2,9 @@
 import requests
 import time
 import os
+import tempfile
 
-WAV_PATH = os.path.join(os.environ["TEMP"], "test_upload.wav")
+WAV_PATH = os.path.join(os.environ.get("TEMP", tempfile.gettempdir()), "test_upload.wav")
 
 # Upload test
 with open(WAV_PATH, "rb") as f:

@@ -21,6 +21,12 @@ from app.database.session import get_db
 from app.core.config import settings
 # Import all models so Base.metadata knows about them
 from app.models.call import CallRecord, AnalysisReport, Contact
+from app.models.user import User
+from app.models.integrity import FileIntegrityRecord
+
+# Ensure test SECRET_KEY is set
+if not os.environ.get("SECRET_KEY"):
+    os.environ["SECRET_KEY"] = "test-secret-key-12345678901234567890"
 
 # Create a shared temp database file for the test session
 _tmp_db_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -96,10 +102,11 @@ def client(test_db, test_upload_dir):
         )
         
         # Copy routes from original app
-        from app.api.routes import health, calls, analyze
+        from app.api.routes import health, calls, analyze, live_analysis
         app_no_lifespan.include_router(health.router, prefix="/api/v1", tags=["Health"])
         app_no_lifespan.include_router(analyze.router, prefix="/api/v1", tags=["Analysis"])
         app_no_lifespan.include_router(calls.router, prefix="/api/v1", tags=["Calls (legacy)"])
+        app_no_lifespan.include_router(live_analysis.router, prefix="/api/v1", tags=["Live Analysis"])
         
         # Add root endpoint
         @app_no_lifespan.get("/")
@@ -118,7 +125,38 @@ def client(test_db, test_upload_dir):
             finally:
                 pass
         
+        from app.auth.dependencies import get_current_user, get_current_active_user
+        from fastapi import Request
+        from app.auth.security import decode_access_token
+
+        def override_get_current_user(request: Request):
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ", 1)[1]
+                payload = decode_access_token(token)
+                if payload and "sub" in payload:
+                    user = test_db.query(User).filter(User.id == payload["sub"]).first()
+                    if user:
+                        return user
+
+            # Default fallback for unauthenticated tests
+            user = test_db.query(User).filter(User.id == "test-default-user-id").first()
+            if not user:
+                user = User(
+                    id="test-default-user-id",
+                    email="test_default@vishwas.ai",
+                    hashed_password="hashed_test_password",
+                    full_name="Default Test User",
+                    is_active=True,
+                )
+                test_db.add(user)
+                test_db.commit()
+                test_db.refresh(user)
+            return user
+
         app_no_lifespan.dependency_overrides[get_db] = override_get_db
+        app_no_lifespan.dependency_overrides[get_current_user] = override_get_current_user
+        app_no_lifespan.dependency_overrides[get_current_active_user] = override_get_current_user
         
         with TestClient(app_no_lifespan, raise_server_exceptions=True) as test_client:
             yield test_client

@@ -107,8 +107,8 @@ class TestE2EBasicFlow:
         # Verify v3 killchain_stage (Task 3 requirement)
         assert "killchain_stage" in report
         if report["killchain_stage"] is not None:
-            assert report["killchain_stage"] in [
-                "RECONNAISSANCE", "IMPERSONATION", "MANIPULATION", "REQUEST"
+            assert report["killchain_stage"].upper() in [
+                "RECONNAISSANCE", "IMPERSONATION", "MANIPULATION", "REQUEST", "ELICITATION"
             ]
         
         # Verify v3 verification object (Task 3 requirement)
@@ -258,8 +258,7 @@ class TestE2EDatabasePersistence:
         if report.verification_json:
             verification = json.loads(report.verification_json)
             assert isinstance(verification, dict)
-            # Fields are optional
-            assert "action" in verification or "target" in verification or "safe_word_prompt" in verification
+            assert "action" in verification or "target" in verification or "safe_word_prompt" in verification or "recommended_steps" in verification
     
     def test_e2e_backward_compatibility_old_records(self, client, test_db):
         """

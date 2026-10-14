@@ -76,7 +76,9 @@ class CredentialRequest(BaseModel):
         "account_number",   # Bank account number
         "aadhar",           # Aadhar number
         "pan",              # PAN card
-        "kyc_details"       # KYC information
+        "kyc_details",      # KYC information
+        "upi_pin",          # UPI PIN / VPA (Phase 5A)
+        "upi_id",           # UPI ID / VPA handle (Phase 5A)
     ] = Field(..., description="Type of credential requested")
     
     quote: str = Field(..., description="Exact quote of the request")
@@ -347,6 +349,25 @@ class EvidenceExtraction(BaseModel):
     extraction_warnings: List[str] = Field(
         default_factory=list,
         description="Warnings or limitations in extraction"
+    )
+
+    # ── Phase 5A: Transcript quality and assessment status (backward-compatible) ──
+    transcript_quality: Optional[dict] = Field(
+        None,
+        description=(
+            "Transcript quality indicators. "
+            "Keys: status (good|low|degraded|unknown), reason, asr_confidence, "
+            "revision_count, empty_segments, language_uncertain. "
+            "None means quality was not assessed."
+        )
+    )
+
+    assessment_status: Optional[str] = Field(
+        None,
+        description=(
+            "Overall assessment status: provisional | complete | degraded | unavailable. "
+            "None means pre-Phase-5A behaviour (treated as provisional)."
+        )
     )
     
     @property

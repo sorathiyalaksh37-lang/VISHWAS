@@ -60,12 +60,16 @@ class TranscriptSegment:
     confidence: float = 1.0  # word-level avg if available
 
 
+# Backward compatibility alias
+ASRSegment = TranscriptSegment
+
+
 @dataclass
 class ASRResult:
     """Full result returned by the ASR service."""
-    call_id: str
-    language: Optional[str]
-    language_probability: float
+    call_id: str = ""
+    language: Optional[str] = None
+    language_probability: float = 0.0
     segments: list[TranscriptSegment] = field(default_factory=list)
     transcription_status: str = "completed"   # completed | failed | unavailable
     duration_seconds: float = 0.0
@@ -179,6 +183,7 @@ class ASRService:
                         text=text,
                         language=info.language,
                         confidence=round(getattr(seg, "avg_logprob", 0.0) + 1.0, 3),
+                        is_final=True,
                     )
                 )
 

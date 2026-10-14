@@ -12,6 +12,10 @@ const PAGE_META: Record<NavItem, { title: string; subtitle: string }> = {
     title: 'Trust Graph',
     subtitle: 'Explore trusted relationships, verification status, and connections relevant to call security.',
   },
+  live: {
+    title: 'Live Call Fraud Monitor',
+    subtitle: 'Real-time call stream processing, incremental ASR, and instant scam assessment.',
+  },
   analyse: {
     title: 'Analyse a Call',
     subtitle: 'Verify voice authenticity and assess potential social-engineering risk.',
