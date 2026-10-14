@@ -1,5 +1,5 @@
 """
-API routes for call recording operations.
+API routes for call recording operations (legacy compat — now auth-protected).
 """
 import json
 import logging
@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import math
 
+from app.auth.dependencies import get_current_active_user
 from app.database.session import get_db
 from app.models.call import CallRecord, AnalysisReport
+from app.models.user import User
 from app.schemas.call import UploadResponse, CallStatusResponse, CallListResponse, CallListItem, PaginationInfo
 from app.schemas.report import TranscriptResponse, AnalysisReportResponse, TranscriptSegment, AgentFinding
 from app.services.file_service import file_service
@@ -25,7 +27,8 @@ logger = logging.getLogger(__name__)
 async def upload_recording(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     Upload a call recording for analysis.
@@ -38,11 +41,12 @@ async def upload_recording(
     # Save uploaded file
     stored_filename, storage_reference, original_filename = await file_service.save_upload(file)
     
-    # Create call record
+    # Create call record — owned by the authenticated user
     call_record = CallRecord(
         original_filename=original_filename,
         stored_filename=stored_filename,
         storage_reference=storage_reference,
+        owner_id=current_user.id,
         status="queued",
         analysis_mode=settings.analysis_mode
     )
@@ -72,7 +76,8 @@ async def upload_recording(
 async def list_calls(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
     Retrieve a paginated list of call recordings.
@@ -81,12 +86,10 @@ async def list_calls(
     """
     # Calculate offset
     offset = (page - 1) * page_size
-    
-    # Get total count
-    total = db.query(CallRecord).count()
-    
-    # Get paginated results
+    # Filter to current user's records only
+    total = db.query(CallRecord).filter(CallRecord.owner_id == current_user.id).count()
     calls = db.query(CallRecord)\
+        .filter(CallRecord.owner_id == current_user.id)\
         .order_by(CallRecord.created_at.desc())\
         .offset(offset)\
         .limit(page_size)\
@@ -118,13 +121,20 @@ async def list_calls(
 
 
 @router.get("/calls/{call_id}/status", response_model=CallStatusResponse)
-async def get_call_status(call_id: str, db: Session = Depends(get_db)):
+async def get_call_status(
+    call_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Check the processing status of a call.
     
     Returns the current status: queued, processing, completed, or failed.
     """
-    call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
+    call = db.query(CallRecord).filter(
+        CallRecord.id == call_id,
+        CallRecord.owner_id == current_user.id
+    ).first()
     
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
@@ -140,13 +150,20 @@ async def get_call_status(call_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/calls/{call_id}/transcript", response_model=TranscriptResponse)
-async def get_transcript(call_id: str, db: Session = Depends(get_db)):
+async def get_transcript(
+    call_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Retrieve the transcription of a call recording.
     
     In Phase 1, this returns mock transcript data for demonstration.
     """
-    call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
+    call = db.query(CallRecord).filter(
+        CallRecord.id == call_id,
+        CallRecord.owner_id == current_user.id
+    ).first()
     
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
@@ -184,14 +201,21 @@ async def get_transcript(call_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/calls/{call_id}/report", response_model=AnalysisReportResponse)
-async def get_report(call_id: str, db: Session = Depends(get_db)):
+async def get_report(
+    call_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """
     Retrieve the complete analysis report for a call.
     
     Returns the full analysis including transcript, findings, risk assessment,
     and recommended actions.
     """
-    call = db.query(CallRecord).filter(CallRecord.id == call_id).first()
+    call = db.query(CallRecord).filter(
+        CallRecord.id == call_id,
+        CallRecord.owner_id == current_user.id
+    ).first()
     
     if not call:
         raise HTTPException(status_code=404, detail="Call not found")
