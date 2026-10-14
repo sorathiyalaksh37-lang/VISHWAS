@@ -108,10 +108,14 @@ export function VoiceDetectionPage() {
     // Convert to Int16 and buffer
     const int16Data = float32ToInt16(audioData)
     const bytes = new Uint8Array(int16Data.buffer)
+    
+    console.log('[VoiceDetection] Processing audio: input samples:', audioData.length, 'bytes:', bytes.length)
 
     // Add to buffer
     const buffer = bufferRef.current
     let position = bufferPositionRef.current
+    
+    console.log('[VoiceDetection] Buffer position before:', position, '/ target:', CHUNK_SIZE_BYTES)
 
     for (let i = 0; i < bytes.length; i++) {
       buffer[position++] = bytes[i]
@@ -221,10 +225,13 @@ export function VoiceDetectionPage() {
       // file which adds build complexity. Modern browsers still support ScriptProcessorNode.
       const processor = audioContext.createScriptProcessor(4096, CHANNELS, CHANNELS)
       processorRef.current = processor
+      
+      console.log('[VoiceDetection] Processor created, buffer size: 4096, channels:', CHANNELS)
+      console.log('[VoiceDetection] AudioContext state:', audioContext.state, 'sampleRate:', audioContext.sampleRate)
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
         const inputData = e.inputBuffer.getChannelData(0)
-        console.log('[VoiceDetection] Audio data received, length:', inputData.length)
+        console.log('[VoiceDetection] Audio data received, length:', inputData.length, 'first sample:', inputData[0])
         processAudio(inputData)
       }
 

@@ -1,0 +1,32 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Android Kotlin streaming voice detection: StreamingVoiceModels.kt data classes, StreamingVoiceDetectionScreen.kt Compose UI with AudioRecord 16kHz PCM, VishwasApiService.kt endpoint additions, VishwasViewModel extension for streaming state. Handles RECORD_AUDIO permission, network errors, cancellation. Does NOT modify existing ViewModel methods or ApiModels.kt structure.",
+  "status": "pending",
+  "steps": [
+    "Read android-app/app/src/main/java/com/vishwas/app/models/ApiModels.kt to understand existing data class patterns and @SerializedName conventions",
+    "Read android-app/app/src/main/java/com/vishwas/app/viewmodel/VishwasViewModel.kt to understand StateFlow, coroutine patterns, repository usage",
+    "Read android-app/app/src/main/java/com/vishwas/app/network/VishwasApiService.kt to understand Retrofit interface patterns",
+    "Create android-app/app/src/main/java/com/vishwas/app/models/StreamingVoiceModels.kt: data classes StreamingStartResponse (sessionId, status, chunkSizeBytes, format), StreamingChunkRequest (audioBytes: ByteArray), StreamingChunkResponse (status, label, spoofProb, confidence, durationAnalyzedMs, chunksProcessed). Use @SerializedName for snake_case JSON fields.",
+    "Update android-app/app/src/main/java/com/vishwas/app/network/VishwasApiService.kt: add three suspend functions: @POST('voice-detection/stream/start') suspend fun startStreamingDetection(): Response<StreamingStartResponse>, @POST('voice-detection/stream/{session_id}/chunk') @Body suspend fun sendAudioChunk(@Path('session_id') sessionId: String, @Body audioBytes: RequestBody): Response<StreamingChunkResponse>, @DELETE('voice-detection/stream/{session_id}') suspend fun stopStreamingDetection(@Path('session_id') sessionId: String): Response<Unit>",
+    "Extend android-app/app/src/main/java/com/vishwas/app/viewmodel/VishwasViewModel.kt: add StreamingVoiceState data class (sessionId, isRecording, currentLabel, spoofProb, confidence, error). Add private MutableStateFlow<StreamingVoiceState> and public StateFlow. Add methods: startStreamingRecording() (requests RECORD_AUDIO permission via rememberLauncherForActivityResult, calls repository.startStreamingDetection(), starts AudioRecord 16kHz/16-bit PCM mono, reads 3s chunks in loop, calls repository.sendAudioChunk() per chunk, updates StateFlow with response), stopStreamingRecording() (stops AudioRecord, calls repository.stopStreamingDetection(), clears state). DO NOT modify existing uploadRecording, loadReport, loadHistory methods.",
+    "Create android-app/app/src/main/java/com/vishwas/app/ui/screens/StreamingVoiceDetectionScreen.kt: Jetpack Compose screen with Column layout, top app bar 'Live Voice Detection', live spoof-prob CircularProgressIndicator (0-1 range, red=1 AI, green=0 human), Text showing label (human/ai_generated/uncertain/insufficient_data), Text showing confidence, Button 'Start Recording' / 'Stop Recording', error Snackbar. Collects viewModel.streamingVoiceState via collectAsState(). Requests RECORD_AUDIO permission on start. Follows Material 3 design patterns from existing screens.",
+    "Update android-app/app/src/main/java/com/vishwas/app/ui/Navigation.kt: add route 'streaming_voice' to NavHost, add nav item to bottom nav or drawer pointing to StreamingVoiceDetectionScreen",
+    "Manually test on emulator: Build app, navigate to Streaming Voice Detection, grant permission, tap Start, verify label updates every 3s, tap Stop, verify session cleaned up"
+  ],
+  "acceptance_criteria": [
+    "android-app/app/src/main/java/com/vishwas/app/models/StreamingVoiceModels.kt exists with request/response data classes",
+    "android-app/app/src/main/java/com/vishwas/app/network/VishwasApiService.kt includes three streaming endpoints",
+    "android-app/app/src/main/java/com/vishwas/app/viewmodel/VishwasViewModel.kt extended with StreamingVoiceState and start/stop methods (existing methods unchanged)",
+    "android-app/app/src/main/java/com/vishwas/app/ui/screens/StreamingVoiceDetectionScreen.kt exists with Compose UI, AudioRecord, permission handling",
+    "android-app/app/src/main/java/com/vishwas/app/ui/Navigation.kt includes streaming_voice route",
+    "App builds without errors (./gradlew build or Android Studio build)",
+    "Manual test on emulator: screen loads, permission requested, recording starts/stops, label updates"
+  ],
+  "verification": [
+    "./gradlew build (or Android Studio build)",
+    "Manual emulator test: navigate to Streaming Voice Detection, start recording, verify live updates, stop recording"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

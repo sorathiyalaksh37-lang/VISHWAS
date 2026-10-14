@@ -817,3 +817,214 @@ async def get_all_integrity_records(
             for rec in records
         ],
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STREAMING VOICE DETECTION ENDPOINTS (FEAT-001)
+# ══════════════════════════════════════════════════════════════════════════════
+
+from app.services.streaming_session_manager import get_streaming_session_manager
+
+
+@router.post("/voice-detection/stream/start", status_code=200)
+async def start_streaming_session(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Start a new streaming voice detection session.
+    
+    **Authentication required.**
+    
+    Returns a session_id to use for subsequent chunk uploads.
+    Sessions expire after 30 minutes of inactivity.
+    
+    Response:
+        - session_id: Unique session identifier
+        - status: 'ready'
+        - chunk_size_bytes: Recommended chunk size (48000 bytes = ~1.5s at 16kHz mono)
+        - format: Required audio format
+        - max_duration_minutes: Maximum session duration
+    """
+    session_manager = get_streaming_session_manager()
+    session_id = session_manager.create_session(user_id=current_user.id)
+    
+    logger.info(f"Started streaming session {session_id} for user {current_user.email}")
+    
+    return {
+        "session_id": session_id,
+        "status": "ready",
+        "chunk_size_bytes": 48000,  # ~1.5s at 16kHz mono PCM int16
+        "format": "wav_16khz_mono",
+        "max_duration_minutes": 5,
+        "ttl_minutes": 30,
+    }
+
+
+@router.post("/voice-detection/stream/{session_id}/chunk", status_code=200)
+async def process_streaming_chunk(
+    session_id: str,
+    chunk: bytes = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Process an audio chunk for an active streaming session.
+    
+    **Authentication required.**
+    
+    Accepts raw audio bytes (PCM int16, 16kHz mono) and returns
+    incremental detection results with temporal smoothing.
+    
+    Args:
+        session_id: Session identifier from /stream/start
+        chunk: Raw audio bytes (PCM int16, 16kHz mono)
+    
+    Response:
+        - status: 'processing' | 'ready'
+        - label: 'human' | 'ai_generated' | 'uncertain' | 'insufficient_data'
+        - spoof_prob: Float [0-1] where higher = more likely AI-generated
+        - confidence: 'insufficient_data' | 'low' | 'medium' | 'high'
+        - duration_analyzed_ms: Total audio duration analyzed
+        - chunks_processed: Number of chunks processed
+    
+    Errors:
+        - 404: Session not found or expired
+        - 400: Invalid audio format
+        - 503: Model unavailable
+    """
+    session_manager = get_streaming_session_manager()
+    session = session_manager.get_session(session_id)
+    
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found or expired"
+        )
+    
+    # Verify session belongs to current user
+    if session['user_id'] != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"  # Don't reveal session exists for other user
+        )
+    
+    # Get detector from session
+    detector = session['detector']
+    
+    # Process chunk
+    try:
+        result = detector.process_chunk(chunk, sample_rate=16000)
+    except Exception as e:
+        logger.error(f"Chunk processing failed for session {session_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Chunk processing failed: {str(e)}"
+        )
+    
+    # Check for errors in result
+    if 'error' in result:
+        error_msg = result['error']
+        if 'Model unavailable' in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=error_msg
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg
+            )
+    
+    # Update session metadata
+    session['total_chunks'] += 1
+    
+    # Determine label based on spoof_prob and confidence
+    spoof_prob = result.get('current_spoof_prob')
+    confidence = result.get('confidence_level', 'insufficient_data')
+    
+    if confidence == 'insufficient_data' or spoof_prob is None:
+        label = 'insufficient_data'
+    elif confidence in ('low', 'medium'):
+        label = 'uncertain'
+    else:
+        # High confidence: classify based on threshold
+        threshold = 0.5
+        if spoof_prob > threshold:
+            label = 'ai_generated'
+        else:
+            label = 'human'
+    
+    response = {
+        "status": "processing" if label == 'insufficient_data' else "ready",
+        "label": label,
+        "spoof_prob": spoof_prob,
+        "confidence": confidence,
+        "duration_analyzed_ms": result['duration_analyzed_ms'],
+        "chunks_processed": session['total_chunks'],
+    }
+    
+    logger.debug(
+        f"Session {session_id}: chunk {session['total_chunks']}, "
+        f"label={label}, prob={spoof_prob}, confidence={confidence}"
+    )
+    
+    return response
+
+
+@router.delete("/voice-detection/stream/{session_id}", status_code=200)
+async def delete_streaming_session(
+    session_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete a streaming session and free resources.
+    
+    **Authentication required.**
+    
+    Should be called when the user stops recording or navigates away.
+    Sessions also expire automatically after 30 minutes of inactivity.
+    
+    Args:
+        session_id: Session identifier
+    
+    Response:
+        - session_id: Deleted session identifier
+        - status: 'deleted'
+    
+    Errors:
+        - 404: Session not found
+    """
+    session_manager = get_streaming_session_manager()
+    
+    # Verify session exists and belongs to user
+    session = session_manager.get_session(session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    
+    if session['user_id'] != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    
+    # Delete session
+    deleted = session_manager.delete_session(session_id)
+    
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    
+    logger.info(f"Deleted streaming session {session_id} for user {current_user.email}")
+    
+    return {
+        "session_id": session_id,
+        "status": "deleted",
+        "message": "Session deleted successfully"
+    }

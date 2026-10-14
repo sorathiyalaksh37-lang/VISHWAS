@@ -1,0 +1,7 @@
+{
+  "task_id": "task-streaming-voice-detection",
+  "task_description": "Integrate real-time streaming AI-generated voice detection into the existing Vishwas project",
+  "status": "pending",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

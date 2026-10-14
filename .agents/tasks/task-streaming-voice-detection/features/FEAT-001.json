@@ -1,0 +1,31 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Backend streaming voice detection infrastructure: StreamingVoiceDetector wrapping existing VoiceLayer, in-memory StreamingSessionManager with TTL cleanup, and three new endpoints appended to backend/app/api/routes/analyze.py (POST /stream/start, POST /stream/{session_id}/chunk, DELETE /stream/{session_id}). Includes comprehensive tests.",
+  "status": "pending",
+  "steps": [
+    "Read backend/app/audio/voice_layer.py to confirm _spoof_prob_for_window signature and VoiceLayer.analyze() contract",
+    "Read backend/app/core/config.py to understand Settings patterns and existing config fields",
+    "Create backend/app/audio/streaming_voice_detector.py: StreamingVoiceDetector class that wraps VoiceLayer singleton (get_voice_layer()), maintains internal buffer (collections.deque) of audio chunks, calls _spoof_prob_for_window() per chunk, applies exponential moving average temporal smoothing (alpha=0.3), returns {is_processing: bool, current_spoof_prob: float | None, confidence_level: str, chunks_analyzed: int, duration_analyzed_ms: int}. Quality gate: requires >= 3s accumulated audio before returning confident result. Thread-safe using threading.Lock.",
+    "Create backend/app/services/streaming_session_manager.py: StreamingSessionManager class with in-memory dict {session_id: {detector: StreamingVoiceDetector, created_at: datetime, last_accessed: datetime, total_chunks: int}}. Methods: create_session() -> session_id, get_session(session_id), delete_session(session_id), cleanup_expired(max_age_minutes=30). Background cleanup_task() function using asyncio.create_task. Singleton instance. Thread-safe using threading.Lock.",
+    "Append three new endpoints to backend/app/api/routes/analyze.py following existing patterns: POST /api/v1/voice-detection/stream/start (auth required, returns {session_id, status: 'ready', chunk_size_bytes: 48000, format: 'wav_16khz_mono'}), POST /api/v1/voice-detection/stream/{session_id}/chunk (auth required, accepts audio bytes in request body, calls detector.process_chunk(), returns {status: 'processing' | 'ready', label: 'human' | 'ai_generated' | 'uncertain' | 'insufficient_data', spoof_prob: float | None, confidence: str, duration_analyzed_ms: int, chunks_processed: int}), DELETE /api/v1/voice-detection/stream/{session_id} (cleanup session). Use HTTPException for invalid session_id (404), unsupported audio format (400), model unavailable (503).",
+    "Register new router prefix in backend/app/main.py if needed (check existing router registration pattern)",
+    "Create backend/tests/test_streaming_voice_detection.py with >= 10 test cases: session lifecycle (create, use, delete), incremental chunk processing (3 chunks of 3s each), temporal smoothing verification (mock _spoof_prob_for_window to return [0.8, 0.6, 0.7], verify EMA), quality gate (send 1s chunk, verify 'insufficient_data'), concurrent sessions (2 users, 2 session_ids), session timeout cleanup, invalid session_id (404), model unavailable (mock VoiceLayer to raise), malformed audio chunk (400), thread safety (simulate concurrent chunk uploads). Use conftest.py fixtures (test_db, client). Mock VoiceLayer._spoof_prob_for_window using unittest.mock.patch.",
+    "Add README_STREAMING_DETECTION.md at repository root: API documentation with curl examples for /stream/start, /stream/chunk, /stream/delete. Explain temporal smoothing, quality gates, session TTL (30 min), max session duration (5 min), supported audio format (WAV 16kHz mono PCM), thread safety, error handling, limitations (single-shot model repurposed for streaming, no true online learning)."
+  ],
+  "acceptance_criteria": [
+    "backend/app/audio/streaming_voice_detector.py exists with StreamingVoiceDetector class implementing temporal smoothing and quality gates",
+    "backend/app/services/streaming_session_manager.py exists with thread-safe in-memory session storage and TTL cleanup",
+    "Three new endpoints appended to backend/app/api/routes/analyze.py: /stream/start, /stream/{session_id}/chunk, /stream/{session_id}",
+    "backend/tests/test_streaming_voice_detection.py contains >= 10 passing test cases covering session lifecycle, temporal smoothing, quality gates, concurrency, and error handling",
+    "pytest tests/test_streaming_voice_detection.py passes all tests",
+    "pytest tests/ --ignore=tests/test_m2_perception.py -v still shows 381+ passing tests (no regressions)",
+    "README_STREAMING_DETECTION.md documents API with curl examples and explains design decisions"
+  ],
+  "verification": [
+    "pytest tests/test_streaming_voice_detection.py -v",
+    "pytest tests/ --ignore=tests/test_m2_perception.py -v (verify 381+ passing, 0 failed)"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

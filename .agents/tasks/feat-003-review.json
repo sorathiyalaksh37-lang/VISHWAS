@@ -1,0 +1,30 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "title": "Path parameter name mismatch breaks routing",
+      "description": "VishwasApiService.kt uses {sessionId} in @POST(\"voice-detection/stream/{sessionId}/chunk\") and @DELETE(\"voice-detection/stream/{sessionId}\"), but the backend routes expect {session_id}. Change both Retrofit paths to {session_id} to match the backend's FastAPI route definitions.",
+      "severity": "blocking",
+      "confidence": "confirmed"
+    },
+    {
+      "title": "ViewModel cleanup missing",
+      "description": "VishwasViewModel does not override onCleared() to cancel streaming coroutines or delete backend sessions. When the ViewModel is destroyed (process death, ViewModel scope cleared), active sessions leak until the 30-minute TTL. Override onCleared() and track the active sessionId to call stopVoiceStreaming() before clearing.",
+      "severity": "blocking",
+      "confidence": "confirmed"
+    },
+    {
+      "title": "Stale waveform persists across sessions",
+      "description": "waveformData state is not reset when transitioning from Complete/Error to a new session. The \"Start New Session\" button resets the state machine but not the waveform array. Reset waveformData = FloatArray(100) { 0f } in the same button handler or when starting recording.",
+      "severity": "minor",
+      "confidence": "confirmed"
+    },
+    {
+      "title": "Partial chunk dropped at session end",
+      "description": "Accumulated bytes (0-47999) are discarded when recording stops. The plan documents this as intentional (matching React frontend), but the UI info card does not mention it. Users might expect the last 1-2 seconds to be analyzed. Add a note to the info card: \"Audio is processed in ~1.5s chunks; the final partial chunk is not analyzed.\"",
+      "severity": "minor",
+      "confidence": "confirmed"
+    }
+  ],
+  "reviewDoc": "c:/Users/Vaishnavi/Desktop/Vishwas Kiro/VISHWAS/.agents/tasks/feat-003-review.md"
+}

@@ -1,0 +1,29 @@
+{
+  "project_type": "Full-stack fraud detection: FastAPI backend + React+Vite frontend + Android Kotlin client",
+  "language": "Python (backend), TypeScript (frontend), Kotlin (Android)",
+  "build_system": "pip + venv (backend), npm + Vite (frontend), Gradle (Android)",
+  "test_framework": "pytest with httpx TestClient in backend/tests/, fixtures in conftest.py",
+  "build_command": "No compile step for backend; frontend: npm run build",
+  "test_command": "pytest tests/ --ignore=tests/test_m2_perception.py -v (381 passing tests must remain passing)",
+  "verification_instructions": "Run pytest on new test files. Manually test streaming endpoints with curl. Verify frontend captures audio and polls /stream/chunk. Check Android permissions and network calls.",
+  "snapshot_or_generated_files": "None. All source files are committed; no build-generated artifacts checked in.",
+  "environment_constraints": "Backend uses existing VoiceLayer singleton with Vansh180/deepfake-audio-wav2vec2 model. Model loading is lazy. Auth uses JWT (get_current_active_user dependency). CORS origins in settings.cors_origins_list. Upload dir is settings.upload_dir. Threading: use threading.Lock for session manager. Do NOT restart dev servers.",
+  "contribution_requirements": "Append new routes to backend/app/api/routes/analyze.py (do NOT create separate file). Use existing patterns: FastAPI Depends for auth+DB, async def for endpoints, HTTPException for errors, background_tasks for async work. Frontend: follow existing Tailwind utility classes, lucide-react icons, apiClient singleton pattern. Android: follow coroutine/StateFlow patterns in VishwasViewModel, use existing VishwasApiService + Retrofit, request permissions via rememberLauncherForActivityResult.",
+  "key_patterns": "Backend routes use @router decorators, get_current_active_user for auth, db: Session = Depends(get_db), return Pydantic response models. VoiceLayer._spoof_prob_for_window(samples: np.ndarray) -> float (samples are float32 normalized -1 to 1). Frontend api.ts uses async/await, getAuthToken() for Bearer header, returns T | null on error. Android uses Flow<Result<T>> in repository, fold(onSuccess, onFailure) in ViewModel.",
+  "relevant_files": [
+    "backend/app/audio/voice_layer.py",
+    "backend/app/audio/preprocessor.py",
+    "backend/app/core/config.py",
+    "backend/app/auth/dependencies.py",
+    "backend/app/api/routes/analyze.py",
+    "backend/app/main.py",
+    "backend/tests/conftest.py",
+    "vishwas-frontend/src/services/api.ts",
+    "vishwas-frontend/src/App.tsx",
+    "vishwas-frontend/src/pages/AnalyseACall.tsx",
+    "android-app/app/src/main/java/com/vishwas/app/models/ApiModels.kt",
+    "android-app/app/src/main/java/com/vishwas/app/viewmodel/VishwasViewModel.kt",
+    "android-app/app/src/main/java/com/vishwas/app/network/VishwasApiService.kt"
+  ],
+  "directory_structure": "backend/app/{audio,api/routes,auth,core,services,models,database}, vishwas-frontend/src/{pages,services,components}, android-app/app/src/main/java/com/vishwas/app/{models,viewmodel,network,ui}"
+}

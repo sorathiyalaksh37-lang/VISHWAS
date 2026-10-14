@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Frontend React streaming voice detection page: VoiceDetectionPage.tsx using Web Audio API for microphone capture, real-time waveform visualization, chunk-by-chunk transmission to /stream/chunk every ~3s, live spoof-probability gauge, start/stop controls, error/loading/insufficient-data states, score explanation, disclaimer. Integrated into App.tsx routing following existing navigation patterns.",
+  "status": "pending",
+  "steps": [
+    "Read vishwas-frontend/src/services/api.ts to understand apiClient patterns (async/await, getAuthToken(), error handling)",
+    "Read vishwas-frontend/src/App.tsx to understand navigation state and route registration",
+    "Read vishwas-frontend/src/pages/AnalyseACall.tsx as reference for existing page layout, Tailwind classes, lucide-react icons",
+    "Extend vishwas-frontend/src/services/api.ts with four new methods: startStreamingDetection() -> {session_id, status, chunk_size_bytes} | null, sendAudioChunk(session_id: string, audioBlob: Blob) -> {status, label, spoof_prob, confidence, duration_analyzed_ms, chunks_processed} | null, stopStreamingDetection(session_id: string) -> void, analyzeSingleSegment(file: File) -> {label, spoof_prob, confidence} | null (bonus single-shot endpoint if backend implements it). Follow existing error handling: catch errors, log to console, return null.",
+    "Create vishwas-frontend/src/pages/VoiceDetectionPage.tsx: React component using useState for {isRecording, sessionId, currentLabel, spoofProb, confidence, error, isLoading}. useEffect to initialize Web Audio API (navigator.mediaDevices.getUserMedia({audio: {sampleRate: 16000, channelCount: 1}}), AudioContext, MediaStreamAudioSourceNode, ScriptProcessorNode or AudioWorklet to capture PCM samples). Start button calls apiClient.startStreamingDetection(), begins recording. Every 3s, send accumulated audio chunk via apiClient.sendAudioChunk(), update UI with response. Stop button calls apiClient.stopStreamingDetection(), stops recording, cleans up AudioContext. Display: live waveform (canvas with oscilloscope pattern), circular gauge showing spoofProb 0-1 (red=1.0 AI, green=0.0 human), label badge (human/ai_generated/uncertain/insufficient_data), confidence indicator (low/medium/high), error banner, loading spinner, disclaimer text ('This is an estimate, not proof. Results depend on model training data.'). Use Tailwind utility classes matching existing pages. Use lucide-react icons (Mic, MicOff, AlertCircle, CheckCircle, XCircle).",
+    "Update vishwas-frontend/src/App.tsx: add 'voice-detection' to NavItem type, add case in renderPage() switch statement to render <VoiceDetectionPage />, ensure Sidebar in Shell component includes the new nav item",
+    "Manually test in browser: npm run dev, navigate to Voice Detection page, grant microphone permission, click Start, speak for 10s, verify gauge updates every 3s, click Stop, verify session cleaned up, verify error states (deny mic permission, backend offline)"
+  ],
+  "acceptance_criteria": [
+    "vishwas-frontend/src/services/api.ts includes startStreamingDetection(), sendAudioChunk(), stopStreamingDetection() methods",
+    "vishwas-frontend/src/pages/VoiceDetectionPage.tsx exists with microphone capture, waveform, gauge, start/stop controls",
+    "vishwas-frontend/src/App.tsx includes 'voice-detection' route rendering VoiceDetectionPage",
+    "Page displays live spoof-probability gauge updating every 3s while recording",
+    "Page handles errors gracefully: mic permission denied, backend unavailable, insufficient audio",
+    "Page includes disclaimer: 'This is an estimate, not proof'",
+    "npm run dev succeeds, page loads without console errors"
+  ],
+  "verification": [
+    "npm run dev (verify no build errors)",
+    "Manual browser test: navigate to Voice Detection, start recording, verify gauge updates, stop recording"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
