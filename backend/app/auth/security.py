@@ -1,17 +1,18 @@
 """
 Authentication and security utilities.
+
+Note: We use bcrypt directly instead of passlib.CryptContext because passlib 1.7.4
+has an internal detect_wrap_bug() that passes a >72-byte string to bcrypt, which
+raises ValueError in bcrypt>=4.x. Going direct avoids this incompatibility.
 """
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt as _bcrypt
 from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT configuration
 ALGORITHM = "HS256"
@@ -19,17 +20,22 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash. Truncates to 72 bytes if needed."""
-    # BCrypt has a 72 byte limit, truncate if necessary
-    password_bytes = plain_password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.verify(password_bytes, hashed_password)
+    """Verify a password against its hash. Truncates to 72 bytes (bcrypt limit)."""
+    try:
+        # BCrypt limit is 72 bytes — truncate raw bytes before hashing
+        password_bytes = plain_password.encode('utf-8')[:72]
+        hashed_bytes = hashed_password.encode('utf-8') if isinstance(hashed_password, str) else hashed_password
+        return _bcrypt.checkpw(password_bytes, hashed_bytes)
+    except Exception as e:
+        logger.error(f"Password verification error: {e}")
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password using bcrypt. Truncates to 72 bytes if needed."""
-    # BCrypt has a 72 byte limit, truncate if necessary
-    password_bytes = password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.hash(password_bytes)
+    """Hash a password using bcrypt (cost factor 12). Truncates to 72 bytes."""
+    # BCrypt limit is 72 bytes — truncate raw bytes before hashing
+    password_bytes = password.encode('utf-8')[:72]
+    return _bcrypt.hashpw(password_bytes, _bcrypt.gensalt(rounds=12)).decode('utf-8')
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

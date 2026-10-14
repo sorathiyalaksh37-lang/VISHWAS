@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-set -e
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_BIN=""
-if [ -f "/opt/anaconda3/bin/python3" ]; then
-    PYTHON_BIN="/opt/anaconda3/bin/python3"
-elif command -v python3 &>/dev/null; then
-    PYTHON_BIN="$(command -v python3)"
-else
-    PYTHON_BIN="python"
-fi
-"$PYTHON_BIN" "$DIR/stop.py"
+# Stop all VISHWAS services
+echo "Stopping VISHWAS services..."
+pkill -f "uvicorn app.main:app" 2>/dev/null && echo "✓ Backend stopped" || echo "  Backend was not running"
+pkill -f "vite" 2>/dev/null && echo "✓ Frontend stopped" || echo "  Frontend was not running"
+echo "Done."
