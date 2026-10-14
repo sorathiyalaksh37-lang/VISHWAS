@@ -209,23 +209,61 @@ export function VoiceDetectionPage() {
 
       // Request microphone access
       console.log('[VoiceDetection] Requesting microphone access...')
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: SAMPLE_RATE,
-          channelCount: CHANNELS,
-          echoCancellation: true,
-          noiseSuppression: false,
-        },
-      })
-      console.log('[VoiceDetection] Microphone access granted')
+      
+      // Try with ideal constraints first, fallback to basic if needed
+      let stream: MediaStream | null = null
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: { ideal: SAMPLE_RATE },
+            channelCount: { ideal: CHANNELS },
+            echoCancellation: true,
+            noiseSuppression: false,
+            autoGainControl: false, // Disable AGC to prevent audio being muted
+          },
+        })
+        console.log('[VoiceDetection] ✓ Microphone access granted with ideal constraints')
+      } catch (err) {
+        console.warn('[VoiceDetection] Ideal constraints failed, trying basic audio...', err)
+        // Fallback to basic audio if ideal constraints don't work
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        })
+        console.log('[VoiceDetection] ✓ Microphone access granted with basic constraints')
+      }
+      
+      if (!stream) {
+        throw new Error('Failed to get media stream')
+      }
+      
+      // Check audio tracks
+      const audioTracks = stream.getAudioTracks()
+      console.log('[VoiceDetection] Audio tracks:', audioTracks.length)
+      if (audioTracks.length > 0) {
+        const settings = audioTracks[0].getSettings()
+        console.log('[VoiceDetection] Track settings:', {
+          sampleRate: settings.sampleRate,
+          channelCount: settings.channelCount,
+          deviceId: settings.deviceId
+        })
+      }
 
       mediaStreamRef.current = stream
 
       // Create audio context
       const audioContext = new AudioContext({ sampleRate: SAMPLE_RATE })
       audioContextRef.current = audioContext
+      
+      // CRITICAL FIX: Resume AudioContext (browser security requirement)
+      if (audioContext.state === 'suspended') {
+        console.log('[VoiceDetection] AudioContext suspended, resuming...')
+        await audioContext.resume()
+      }
+      
+      console.log('[VoiceDetection] AudioContext state after resume:', audioContext.state, 'sampleRate:', audioContext.sampleRate)
 
       const source = audioContext.createMediaStreamSource(stream)
+      console.log('[VoiceDetection] MediaStreamSource created')
 
       // Create processor node (4096 buffer size)
       // Note: ScriptProcessorNode is deprecated in favor of AudioWorkletNode, but we use it here
@@ -234,22 +272,31 @@ export function VoiceDetectionPage() {
       const processor = audioContext.createScriptProcessor(4096, CHANNELS, CHANNELS)
       processorRef.current = processor
       
-      console.log('[VoiceDetection] Processor created, buffer size: 4096, channels:', CHANNELS)
-      console.log('[VoiceDetection] AudioContext state:', audioContext.state, 'sampleRate:', audioContext.sampleRate)
+      console.log('[VoiceDetection] Processor created, buffer size: 4096')
 
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
         const inputData = e.inputBuffer.getChannelData(0)
-        console.log('[VoiceDetection] Audio data received, length:', inputData.length, 'first sample:', inputData[0])
+        
+        // Check if actually receiving audio
+        const hasAudio = inputData.some(sample => Math.abs(sample) > 0.001)
+        if (!hasAudio) {
+          console.warn('[VoiceDetection] ⚠ Silence detected (all near-zero samples)')
+        } else {
+          const maxAmplitude = Math.max(...Array.from(inputData).map(Math.abs))
+          console.log('[VoiceDetection] Audio data received, length:', inputData.length, 'max amplitude:', maxAmplitude.toFixed(4))
+        }
+        
         processAudio(inputData)
       }
 
       source.connect(processor)
       processor.connect(audioContext.destination)
 
-      console.log('[VoiceDetection] Audio pipeline connected successfully')
+      console.log('[VoiceDetection] Audio pipeline connected: MediaStream → Processor → Destination')
+      
       setRecording(true)
       setStatus('listening')
-      console.log('[VoiceDetection] Recording started')
+      console.log('[VoiceDetection] ✓ Recording started successfully')
     } catch (error) {
       console.error('Error starting recording:', error)
       setStatus('error')

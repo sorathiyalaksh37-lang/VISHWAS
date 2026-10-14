@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Capture Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #1e293b; color: #e2e8f0; }
+        button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
+        #log { background: #0f172a; padding: 15px; border-radius: 8px; margin-top: 20px; 
+               max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .info { color: #60a5fa; }
+    </style>
+</head>
+<body>
+    <h1>Audio Capture Test</h1>
+    <p>This page tests if audio capture and chunking works correctly.</p>
+    
+    <button id="startBtn" onclick="startRecording()">Start Recording</button>
+    <button id="stopBtn" onclick="stopRecording()" disabled>Stop Recording</button>
+    
+    <div id="status">Status: Idle</div>
+    <div id="log"></div>
+
+    <script>
+        const CHUNK_SIZE_BYTES = 48000;
+        const SAMPLE_RATE = 16000;
+        
+        let audioContext = null;
+        let mediaStream = null;
+        let processor = null;
+        let buffer = new Uint8Array(CHUNK_SIZE_BYTES * 2);
+        let bufferPosition = 0;
+        let chunksCreated = 0;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function float32ToInt16(float32Array) {
+            const int16Array = new Int16Array(float32Array.length);
+            for (let i = 0; i < float32Array.length; i++) {
+                const s = Math.max(-1, Math.min(1, float32Array[i]));
+                int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+            }
+            return int16Array;
+        }
+
+        async function startRecording() {
+            try {
+                log('Requesting microphone access...', 'info');
+                document.getElementById('status').textContent = 'Status: Requesting mic...';
+                
+                // Try ideal constraints first
+                let mediaStream;
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            sampleRate: { ideal: SAMPLE_RATE },
+                            channelCount: { ideal: 1 },
+                            echoCancellation: true,
+                            noiseSuppression: false,
+                            autoGainControl: false,
+                        }
+                    });
+                    log('✓ Microphone access granted (ideal constraints)', 'success');
+                } catch (e) {
+                    log('⚠ Ideal constraints failed, trying basic audio...', 'info');
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    log('✓ Microphone access granted (basic constraints)', 'success');
+                }
+                
+                // Log track settings
+                const tracks = mediaStream.getAudioTracks();
+                if (tracks.length > 0) {
+                    const settings = tracks[0].getSettings();
+                    log(`Track settings: ${settings.sampleRate}Hz, ${settings.channelCount} channel(s)`, 'info');
+                }
+                
+                audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+                
+                // Resume if suspended (browser security)
+                if (audioContext.state === 'suspended') {
+                    log('AudioContext suspended, resuming...', 'info');
+                    await audioContext.resume();
+                }
+                log(`✓ AudioContext created (state: ${audioContext.state}, sampleRate: ${audioContext.sampleRate}Hz)`, 'success');
+                
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                processor.onaudioprocess = (e) => {
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    
+                    // Check if we're getting actual audio data
+                    const max = Math.max(...inputData);
+                    const min = Math.min(...inputData);
+                    const hasAudio = inputData.some(s => Math.abs(s) > 0.001);
+                    
+                    if (!hasAudio) {
+                        log('⚠ Silence detected (all near-zero samples)', 'error');
+                    } else {
+                        const maxAmp = Math.max(...Array.from(inputData).map(Math.abs));
+                        if (chunksCreated === 0) { // Log first non-silent sample
+                            log(`✓ Audio detected! Max amplitude: ${maxAmp.toFixed(4)}`, 'success');
+                        }
+                    }
+                    
+                    // Convert to int16
+                    const int16Data = float32ToInt16(inputData);
+                    const bytes = new Uint8Array(int16Data.buffer);
+                    
+                    // Add to buffer
+                    for (let i = 0; i < bytes.length; i++) {
+                        buffer[bufferPosition++] = bytes[i];
+                        
+                        if (bufferPosition >= CHUNK_SIZE_BYTES) {
+                            chunksCreated++;
+                            log(`✓ Chunk ${chunksCreated} ready (${CHUNK_SIZE_BYTES} bytes)`, 'success');
+                            document.getElementById('status').textContent = 
+                                `Status: Recording... (${chunksCreated} chunks created)`;
+                            
+                            // Reset buffer
+                            bufferPosition = 0;
+                        }
+                    }
+                };
+                
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                
+                log('✓ Audio pipeline connected', 'success');
+                document.getElementById('status').textContent = 'Status: Recording... Speak now!';
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                
+            } catch (error) {
+                log(`✗ Error: ${error.message}`, 'error');
+                document.getElementById('status').textContent = `Status: Error - ${error.message}`;
+            }
+        }
+
+        function stopRecording() {
+            if (processor) {
+                processor.disconnect();
+                processor = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            
+            log(`✓ Recording stopped. Total chunks: ${chunksCreated}`, 'success');
+            document.getElementById('status').textContent = `Status: Stopped (${chunksCreated} chunks)`;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            
+            bufferPosition = 0;
+            chunksCreated = 0;
+        }
+    </script>
+</body>
+</html>
