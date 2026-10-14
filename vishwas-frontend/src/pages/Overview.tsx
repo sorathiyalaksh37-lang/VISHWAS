@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { SummaryCard } from '../components/overview/SummaryCard'
 import { TrustGraphPreview } from '../components/overview/TrustGraphPreview'
+import { RiskScoreGauge } from '../components/shared/RiskScoreGauge'
 import { apiClient, type CallListItem } from '../services/api'
 import type { NavItem } from '../components/layout/Sidebar'
 
@@ -51,6 +52,7 @@ export function Overview({ onNavigate }: OverviewProps) {
   const [calls, setCalls] = useState<CallListItem[]>([])
   const [totalCalls, setTotalCalls] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [demoRiskScore, setDemoRiskScore] = useState(42) // Demo risk score
 
   useEffect(() => {
     async function loadData() {
@@ -149,6 +151,28 @@ export function Overview({ onNavigate }: OverviewProps) {
           />
         ))}
       </div>
+
+      {/* ── Risk Score Gauge (Demo) ──────────────────────────────── */}
+      <section className="overview-section" aria-labelledby="risk-score-heading">
+        <div className="overview-section__header">
+          <h2 id="risk-score-heading" className="section-title">
+            System Risk Assessment
+          </h2>
+          <span className="demo-badge">DEMO DATA</span>
+        </div>
+
+        <RiskScoreGauge 
+          score={demoRiskScore} 
+          showControls={true}
+          animated={true}
+        />
+
+        <p className="overview-note">
+          The Risk Score gauge demonstrates real-time risk assessment visualization.
+          In production, this would connect to the AI risk analysis engine to display
+          actual threat levels based on call analysis data.
+        </p>
+      </section>
 
       {/* ── B. Trust Graph Preview ───────────────────────────────── */}
       <section className="overview-section" aria-labelledby="trust-preview-heading">
