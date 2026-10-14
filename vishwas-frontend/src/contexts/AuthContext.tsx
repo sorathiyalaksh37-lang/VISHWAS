@@ -151,10 +151,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export function useAuth() {
+// Separate hook export to fix Fast Refresh warning
+// This must be a simple wrapper, not a component
+const useAuth = () => {
   const context = useContext(AuthContext)
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
 }
+
+export { useAuth }

@@ -171,7 +171,7 @@ private fun CategoryScoresCard(scores: CategoryScores) {
                         )
                     }
                     LinearProgressIndicator(
-                        progress = { ((value ?: 0).toFloat() / cap).coerceIn(0f, 1f) },
+                        progress = ((value ?: 0).toFloat() / cap).coerceIn(0f, 1f),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

@@ -110,7 +110,7 @@ fun DashboardScreen(
 
                 // Recent Analyses header
                 item {
-                    HorizontalDivider()
+                    Divider()
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("Recent Analyses", style = MaterialTheme.typography.titleMedium)
                 }

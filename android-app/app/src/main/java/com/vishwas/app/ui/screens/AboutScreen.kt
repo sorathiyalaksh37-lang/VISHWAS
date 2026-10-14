@@ -151,7 +151,7 @@ fun AboutScreen(onOpenDrawer: () -> Unit) {
 
             // Copyright
             item {
-                HorizontalDivider()
+                Divider()
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "Copyright © 2026 VISHWAS Team. All rights reserved.",

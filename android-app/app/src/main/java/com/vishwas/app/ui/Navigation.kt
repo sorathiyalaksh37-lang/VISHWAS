@@ -143,7 +143,7 @@ fun VishwasNavHost(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                Divider(modifier = Modifier.padding(horizontal = 16.dp))
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // ── Phase 1 persistent banner (ONE place — not in ResultsScreen) ──
@@ -167,7 +167,7 @@ fun VishwasNavHost(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                Divider(modifier = Modifier.padding(horizontal = 16.dp))
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // ── Navigation items ───────────────────────────────────────────

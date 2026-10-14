@@ -25,6 +25,8 @@ export function VoiceDetectionPage() {
   const [chunksProcessed, setChunksProcessed] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
   const [waveformData, setWaveformData] = useState<Float32Array>(new Float32Array(SAMPLE_RATE))
+  const [microphoneSilent, setMicrophoneSilent] = useState(false)
+  const [lastAudioTime, setLastAudioTime] = useState<number>(Date.now())
 
   const audioContextRef = useRef<AudioContext | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -104,6 +106,20 @@ export function VoiceDetectionPage() {
   async function processAudio(audioData: Float32Array) {
     // Update waveform data for visualization
     setWaveformData(new Float32Array(audioData))
+
+    // Check for actual audio activity
+    const samples = Array.from(audioData)
+    const maxAmplitude = Math.max(...samples.map(Math.abs))
+    
+    if (maxAmplitude > 0.001) {
+      setMicrophoneSilent(false)
+      setLastAudioTime(Date.now())
+    } else {
+      // Check if we've been silent for more than 3 seconds
+      if (Date.now() - lastAudioTime > 3000) {
+        setMicrophoneSilent(true)
+      }
+    }
 
     // Convert to Int16 and buffer
     const int16Data = float32ToInt16(audioData)
@@ -277,13 +293,23 @@ export function VoiceDetectionPage() {
       processor.onaudioprocess = (e: AudioProcessingEvent) => {
         const inputData = e.inputBuffer.getChannelData(0)
         
-        // Check if actually receiving audio
-        const hasAudio = inputData.some(sample => Math.abs(sample) > 0.001)
-        if (!hasAudio) {
-          console.warn('[VoiceDetection] ⚠ Silence detected (all near-zero samples)')
-        } else {
-          const maxAmplitude = Math.max(...Array.from(inputData).map(Math.abs))
-          console.log('[VoiceDetection] Audio data received, length:', inputData.length, 'max amplitude:', maxAmplitude.toFixed(4))
+        // Check if actually receiving audio - improved detection
+        const samples = Array.from(inputData)
+        const maxAmplitude = Math.max(...samples.map(Math.abs))
+        const avgAmplitude = samples.reduce((sum, s) => sum + Math.abs(s), 0) / samples.length
+        
+        // Log every 20th callback to avoid spam
+        if (Math.random() < 0.05) {
+          if (maxAmplitude < 0.001 && avgAmplitude < 0.0001) {
+            console.warn('[VoiceDetection] ⚠️ MICROPHONE ISSUE: Receiving silence (all near-zero samples)')
+            console.warn('[VoiceDetection] Please check:')
+            console.warn('  1. Windows Sound Settings → Input → Select correct microphone')
+            console.warn('  2. Ensure microphone is not muted')
+            console.warn('  3. Speak LOUDLY into microphone')
+            console.warn(`  4. Try diagnostic tool: ${window.location.origin}/mic-test.html`)
+          } else {
+            console.log(`[VoiceDetection] ✓ Audio detected! Max: ${maxAmplitude.toFixed(4)}, Avg: ${avgAmplitude.toFixed(6)}`)
+          }
         }
         
         processAudio(inputData)
@@ -504,6 +530,23 @@ export function VoiceDetectionPage() {
                 <div className="analysis-status__text">
                   <strong>Error:</strong>
                   <span> {errorMsg}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Microphone silence warning */}
+            {recording && microphoneSilent && (
+              <div className="analysis-status analysis-status--error" role="alert" style={{ backgroundColor: 'rgb(127, 29, 29)', borderColor: 'rgb(220, 38, 38)' }}>
+                <AlertCircleIcon size={16} className="analysis-status__icon" />
+                <div className="analysis-status__text">
+                  <strong>Microphone Issue:</strong>
+                  <span> Not detecting audio. Please check:</span>
+                  <ul style={{ marginTop: '0.5rem', marginLeft: '1.5rem', fontSize: '0.875rem' }}>
+                    <li>Windows Sound Settings → Input → Select correct microphone</li>
+                    <li>Microphone is not muted</li>
+                    <li>Speak LOUDLY into microphone</li>
+                    <li>Try <a href="/mic-test.html" target="_blank" style={{ color: '#60a5fa', textDecoration: 'underline' }}>diagnostic tool</a></li>
+                  </ul>
                 </div>
               </div>
             )}

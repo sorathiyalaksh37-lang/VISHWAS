@@ -81,7 +81,7 @@ fun HistoryScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
                 if (filteredCalls.isEmpty()) {
                     Box(

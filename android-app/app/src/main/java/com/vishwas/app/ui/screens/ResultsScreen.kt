@@ -418,7 +418,7 @@ fun ResultsScreen(
                                     }
                                 }
                                 if (metadataExpanded) {
-                                    HorizontalDivider(
+                                    Divider(
                                         modifier = Modifier.padding(vertical = 8.dp)
                                     )
                                     Column(
