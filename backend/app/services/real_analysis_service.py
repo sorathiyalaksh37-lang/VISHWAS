@@ -182,6 +182,50 @@ class RealAnalysisService:
                 voice_dict = {"status": "unavailable"}
                 warnings.append(f"Voice analysis unavailable: {str(ve)[:100]}")
 
+            # ── Step 6a-bis: Dedicated AI voice detector ──────────────────
+            try:
+                if settings.enable_voice_layer:
+                    from app.audio.ai_voice_detector import get_ai_voice_detector
+                    from dataclasses import asdict as _asdict
+                    detector = get_ai_voice_detector()
+                    detection_result = detector.detect(wav_path)
+
+                    # Store as nested object inside voice_dict
+                    detection_dict = _asdict(detection_result)
+                    voice_dict["ai_voice_detection"] = detection_dict
+
+                    logger.info(
+                        f"[{call_id}] AI Voice Detector: "
+                        f"status={detection_result.ai_voice_status}, "
+                        f"spoof_score={detection_result.spoof_score}"
+                    )
+
+                    # If detector found spoof but voice_layer didn't,
+                    # ensure voice_dict reflects it (but keep them separate)
+                    if detection_result.ai_voice_status == "ai_generated_or_spoof_suspected":
+                        warnings.append(
+                            "AI voice detector flagged this audio as potentially "
+                            "synthetic/spoofed. Verify the caller's identity through "
+                            "a trusted channel."
+                        )
+                else:
+                    voice_dict["ai_voice_detection"] = {
+                        "ai_voice_status": "unavailable",
+                        "error": "Voice layer disabled in configuration",
+                    }
+            except Exception as det_err:
+                logger.warning(
+                    f"[{call_id}] AI voice detector failed (continuing safely): {det_err}",
+                    exc_info=True,
+                )
+                voice_dict["ai_voice_detection"] = {
+                    "ai_voice_status": "unavailable",
+                    "error": f"Detector error: {str(det_err)[:100]}",
+                    "limitations": [
+                        "Detection model failed. This does NOT mean the audio is genuine."
+                    ],
+                }
+
             # ── Step 6b: Trust Engine assessment ─────────────────────────────
             try:
                 from app.trust_engine.trust_graph import TrustGraph

@@ -72,6 +72,42 @@ class SpeakerMatch(BaseModel):
     enrolled: Optional[bool] = Field(None)
 
 
+class AIVoiceDetection(BaseModel):
+    """
+    Dedicated AI-generated / synthetic speech detection result.
+
+    This is SEPARATE from speaker similarity (SpeakerMatch) and
+    ASR transcription. An AI-generated voice is not automatically a scam,
+    and a genuine voice can still be used in a scam.
+    """
+    ai_voice_status: str = Field(
+        ...,
+        description=(
+            "ai_generated_or_spoof_suspected | likely_genuine | "
+            "inconclusive | unavailable"
+        ),
+    )
+    spoof_score: Optional[float] = Field(
+        None, ge=0.0, le=1.0,
+        description="P(fake) from model softmax output (0=genuine, 1=spoof)",
+    )
+    genuine_score: Optional[float] = Field(
+        None, ge=0.0, le=1.0,
+        description="P(real) from model softmax output",
+    )
+    score_type: str = Field(
+        "uncalibrated_softmax",
+        description="Always 'uncalibrated_softmax' — not a calibrated probability",
+    )
+    detector_model: Optional[str] = Field(None, description="HuggingFace model ID")
+    detector_version: Optional[str] = Field(None, description="Model version tag")
+    windows_analyzed: Optional[int] = Field(None, ge=0)
+    audio_duration_s: Optional[float] = Field(None, ge=0.0)
+    evidence: List[str] = Field(default_factory=list, description="Human-readable evidence")
+    limitations: List[str] = Field(default_factory=list, description="Known limitations")
+    error: Optional[str] = Field(None, description="Error if unavailable")
+
+
 class VoiceEvidence(BaseModel):
     """Voice layer analysis result."""
     status: Optional[str] = Field(None, description="ok | inconclusive | unavailable")
@@ -80,6 +116,11 @@ class VoiceEvidence(BaseModel):
     speaker_match: Optional[SpeakerMatch] = Field(None)
     quality: Optional[dict] = Field(None, description="{duration_s, snr_db}")
     model: Optional[str] = Field(None)
+    # v3 enrichment: dedicated AI voice detection result
+    ai_voice_detection: Optional[AIVoiceDetection] = Field(
+        None,
+        description="Dedicated AI-generated speech detection result (separate from speaker match)",
+    )
 
 
 class Counterfactual(BaseModel):

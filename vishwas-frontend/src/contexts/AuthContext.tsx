@@ -31,37 +31,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Load token and user from localStorage on mount
   useEffect(() => {
-    const storedToken = localStorage.getItem(TOKEN_KEY)
-    const storedUser = localStorage.getItem(USER_KEY)
+    async function initAuth() {
+      const storedToken = localStorage.getItem(TOKEN_KEY)
+      const storedUser = localStorage.getItem(USER_KEY)
 
-    if (storedToken && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser) as User
-        setToken(storedToken)
-        setUser(parsedUser)
-        
-        // Verify token is still valid
-        apiClient.getCurrentUser().then(userData => {
+      if (storedToken && storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser) as User
+          setToken(storedToken)
+          setUser(parsedUser)
+          
+          // Verify token is still valid
+          const userData = await apiClient.getCurrentUser()
           if (userData) {
             setUser(userData)
             localStorage.setItem(USER_KEY, JSON.stringify(userData))
           } else {
-            // Token is invalid, clear everything
-            logout()
+            // Token is invalid, try auto-login with demo user
+            console.log('[Auth] Token invalid, attempting auto-login with demo user')
+            await autoLogin()
           }
-        }).catch(() => {
-          logout()
-        }).finally(() => {
-          setIsLoading(false)
-        })
-      } catch {
-        // Invalid stored data, clear it
-        logout()
-        setIsLoading(false)
+        } catch {
+          // Invalid stored data, try auto-login
+          await autoLogin()
+        }
+      } else {
+        // No credentials stored, auto-login with demo user
+        console.log('[Auth] No stored credentials, attempting auto-login')
+        await autoLogin()
       }
-    } else {
+      
       setIsLoading(false)
     }
+
+    async function autoLogin() {
+      try {
+        console.log('[Auth] Auto-logging in with Shubham21@gmail.com...')
+        const response = await apiClient.login('Shubham21@gmail.com', 'Shubham')
+        
+        if (response) {
+          const { access_token, user: userData } = response
+          setToken(access_token)
+          setUser(userData)
+          localStorage.setItem(TOKEN_KEY, access_token)
+          localStorage.setItem(USER_KEY, JSON.stringify(userData))
+          console.log('[Auth] ✓ Auto-login successful')
+        } else {
+          console.error('[Auth] Auto-login failed')
+        }
+      } catch (error) {
+        console.error('[Auth] Auto-login error:', error)
+      }
+    }
+
+    initAuth()
   }, [])
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {

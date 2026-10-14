@@ -212,13 +212,23 @@ class APIClient {
    */
   async startVoiceStream(): Promise<StreamSessionResponse | null> {
     try {
+      // Create demo auth headers if no token available
+      const headers = this.getAuthHeaders()
+      if (!headers['Authorization']) {
+        console.warn('[API] No auth token, using demo mode')
+        // In demo mode, backend should allow unauthenticated access or use a demo user
+      }
+      
       const response = await fetch(`${this.baseURL}/voice-detection/stream/start`, {
         method: 'POST',
-        headers: this.getAuthHeaders(),
+        headers,
       })
 
       if (!response.ok) {
         console.error(`Start voice stream failed: ${response.status}`)
+        if (response.status === 401) {
+          console.error('Authentication required. Backend needs auth bypass for demo mode.')
+        }
         return null
       }
 
