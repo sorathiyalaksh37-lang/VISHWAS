@@ -21,7 +21,7 @@ android {
         }
         
         // Backend URL configuration
-        buildConfigField("String", "API_BASE_URL", "\"http://10.10.1.107:8001/api/v1/\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://10.10.1.107:8000/api/v1/\"")
     }
 
     buildTypes {
