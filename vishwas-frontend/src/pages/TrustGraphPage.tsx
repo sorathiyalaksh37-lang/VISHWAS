@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import {
   UsersIcon, PlusIcon, UserIcon, BuildingIcon,
   ClockIcon, MicIcon, CheckCircle2Icon, XCircleIcon,
@@ -485,6 +486,7 @@ function EnrollModal({ contact, onClose, onEnrolled }: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function TrustGraphPage() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -498,15 +500,19 @@ export function TrustGraphPage() {
     setLoading(true); setError('')
     try {
       const token = localStorage.getItem('vishwas:auth_token')
-      const headers: HeadersInit = {}
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
+      
+      if (!token) {
+        throw new Error('Not authenticated. Please wait for auto-login to complete.')
+      }
+      
+      const headers: HeadersInit = {
+        'Authorization': `Bearer ${token}`
       }
       
       const r = await fetch(`${API_BASE}/contacts`, { headers })
       if (!r.ok) {
         if (r.status === 401) {
-          throw new Error('Authentication required. Please refresh the page.')
+          throw new Error('Authentication failed. Token may be expired. Please refresh the page.')
         }
         throw new Error(`HTTP ${r.status}`)
       }
@@ -519,7 +525,15 @@ export function TrustGraphPage() {
     }
   }
 
-  useEffect(() => { fetchContacts() }, [])
+  // Wait for authentication before fetching contacts
+  useEffect(() => { 
+    if (!authLoading && isAuthenticated) {
+      fetchContacts()
+    } else if (!authLoading && !isAuthenticated) {
+      setError('Authentication required. Auto-login may have failed.')
+      setLoading(false)
+    }
+  }, [authLoading, isAuthenticated])
 
   // Update graph nodes when contacts change
   useEffect(() => {
