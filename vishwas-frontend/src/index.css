@@ -8,7 +8,7 @@
  * @import "tailwindcss".
  */
 :root {
-  /* Surfaces */
+  /* Dark mode (default) */
   --color-bg:           #0B1120;
   --color-panel:        #111827;
   --color-border:       #273449;
@@ -34,6 +34,27 @@
 
   /* Shadows */
   --shadow-panel:       0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-topbar:      0 1px 0 var(--color-border);
+}
+
+/* Light mode */
+:root[data-theme="light"] {
+  /* Surfaces */
+  --color-bg:           #F3F4F6;
+  --color-panel:        #FFFFFF;
+  --color-border:       #E5E7EB;
+
+  /* Accents (same for both modes) */
+  --color-accent:       #10B981;
+  --color-warn:         #F59E0B;
+  --color-critical:     #EF4444;
+
+  /* Text */
+  --color-text:         #111827;
+  --color-text-muted:   #6B7280;
+
+  /* Shadows */
+  --shadow-panel:       0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-topbar:      0 1px 0 var(--color-border);
 }
 

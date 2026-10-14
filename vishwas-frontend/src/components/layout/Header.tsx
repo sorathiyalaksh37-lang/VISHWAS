@@ -1,4 +1,5 @@
-import { MenuIcon, WifiOffIcon } from 'lucide-react'
+import { MenuIcon, WifiOffIcon, Sun, Moon } from 'lucide-react'
+import { useTheme } from '../../contexts/ThemeContext'
 
 interface HeaderProps {
   title: string
@@ -7,6 +8,8 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle, onMobileMenuOpen }: HeaderProps) {
+  const { theme, toggleTheme } = useTheme()
+
   return (
     <header className="topbar" role="banner">
       {/* Mobile hamburger */}
@@ -23,6 +26,16 @@ export function Header({ title, subtitle, onMobileMenuOpen }: HeaderProps) {
         <h1 className="topbar__title">{title}</h1>
         <p className="topbar__subtitle">{subtitle}</p>
       </div>
+
+      {/* Theme toggle button */}
+      <button
+        className="topbar__theme-btn"
+        onClick={toggleTheme}
+        aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      >
+        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+      </button>
 
       {/* Backend connection indicator */}
       <div className="topbar__status" aria-label="Backend connection status: Not connected">
