@@ -267,8 +267,19 @@ function AddContactModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
     const nums = numbers.filter(n => n.trim()).join(',')
     const url = `${API_BASE}/contacts?name=${encodeURIComponent(name.trim())}${relation ? `&relation=${encodeURIComponent(relation)}` : ''}${nums ? `&saved_numbers=${encodeURIComponent(nums)}` : ''}`
     try {
-      const r = await fetch(url, { method: 'POST' })
-      if (!r.ok) throw new Error(await r.text())
+      const token = localStorage.getItem('vishwas:auth_token')
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const r = await fetch(url, { method: 'POST', headers })
+      if (!r.ok) {
+        if (r.status === 401) {
+          throw new Error('Authentication required. Please refresh the page.')
+        }
+        throw new Error(await r.text())
+      }
       onAdded()
       onClose()
     } catch (e) {
@@ -369,7 +380,25 @@ function EnrollModal({ contact, onClose, onEnrolled }: {
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const r = await fetch(`${API_BASE}/contacts/${contact.contact_id}/voiceprint`, { method: 'POST', body: fd })
+      const token = localStorage.getItem('vishwas:auth_token')
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const r = await fetch(`${API_BASE}/contacts/${contact.contact_id}/voiceprint`, { 
+        method: 'POST',
+        headers,
+        body: fd 
+      })
+      
+      if (!r.ok) {
+        if (r.status === 401) {
+          throw new Error('Authentication required. Please refresh the page.')
+        }
+        throw new Error(`HTTP ${r.status}`)
+      }
+      
       const data = await r.json()
       setResult(data)
       if (data.enrolled) onEnrolled()
@@ -468,8 +497,19 @@ export function TrustGraphPage() {
   async function fetchContacts() {
     setLoading(true); setError('')
     try {
-      const r = await fetch(`${API_BASE}/contacts`)
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const token = localStorage.getItem('vishwas:auth_token')
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const r = await fetch(`${API_BASE}/contacts`, { headers })
+      if (!r.ok) {
+        if (r.status === 401) {
+          throw new Error('Authentication required. Please refresh the page.')
+        }
+        throw new Error(`HTTP ${r.status}`)
+      }
       const data: Contact[] = await r.json()
       setContacts(data)
     } catch (e) {
