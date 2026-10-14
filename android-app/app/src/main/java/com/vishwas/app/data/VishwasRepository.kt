@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.vishwas.app.models.*
 import com.vishwas.app.network.RetrofitClient
+import com.vishwas.app.network.TokenManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -19,6 +20,65 @@ class VishwasRepository(private val context: Context) {
     
     private val api = RetrofitClient.apiService
     private val TAG = "VishwasRepository"
+
+    // ── Authentication ──────────────────────────────────────────────────
+
+    suspend fun login(email: String, password: String): Result<AuthResponse> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.login(LoginRequest(email, password))
+                if (response.isSuccessful && response.body() != null) {
+                    val auth = response.body()!!
+                    TokenManager.saveToken(auth.accessToken, auth.user.email)
+                    Result.success(auth)
+                } else {
+                    val msg = response.errorBody()?.string() ?: "Login failed (${response.code()})"
+                    Result.failure(Exception(msg))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Login error", e)
+                Result.failure(e)
+            }
+        }
+
+    suspend fun register(email: String, password: String, fullName: String? = null): Result<AuthResponse> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.register(RegisterRequest(email, password, fullName))
+                if (response.isSuccessful && response.body() != null) {
+                    val auth = response.body()!!
+                    TokenManager.saveToken(auth.accessToken, auth.user.email)
+                    Result.success(auth)
+                } else {
+                    val msg = response.errorBody()?.string() ?: "Registration failed (${response.code()})"
+                    Result.failure(Exception(msg))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Register error", e)
+                Result.failure(e)
+            }
+        }
+
+    fun logout() {
+        TokenManager.clear()
+    }
+
+    fun isLoggedIn(): Boolean = TokenManager.isLoggedIn()
+
+    suspend fun getCurrentUser(): Result<UserResponse> =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.getMe()
+                if (response.isSuccessful && response.body() != null) {
+                    Result.success(response.body()!!)
+                } else {
+                    Result.failure(Exception("Failed to get user: ${response.code()}"))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Get current user error", e)
+                Result.failure(e)
+            }
+        }
     
     /**
      * Check backend health

@@ -9,12 +9,31 @@ import retrofit2.http.*
  * Retrofit API service for VISHWAS backend
  */
 interface VishwasApiService {
-    
+
+    // ── Health ────────────────────────────────────────────────────────────────
+
     @GET("health")
     suspend fun healthCheck(): Response<HealthResponse>
+
+    // ── Authentication ────────────────────────────────────────────────────────
+
+    @POST("auth/register")
+    suspend fun register(
+        @Body request: RegisterRequest
+    ): Response<AuthResponse>
+
+    @POST("auth/login")
+    suspend fun login(
+        @Body request: LoginRequest
+    ): Response<AuthResponse>
+
+    @GET("auth/me")
+    suspend fun getMe(): Response<UserResponse>
     
+    // ── Calls — auth-protected (Phase 7) ────────────────────────────────────
+
     @Multipart
-    @POST("calls")
+    @POST("analyze/recording")
     suspend fun uploadRecording(
         @Part file: MultipartBody.Part
     ): Response<UploadResponse>

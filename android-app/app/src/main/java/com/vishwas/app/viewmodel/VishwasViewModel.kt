@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vishwas.app.data.VishwasRepository
 import com.vishwas.app.models.*
+import com.vishwas.app.network.TokenManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +18,8 @@ import kotlinx.coroutines.launch
  * UI State for the main app
  */
 data class VishwasUiState(
+    val isLoggedIn: Boolean = false,          // drives Login vs Main navigation
+    val loggedInEmail: String = "",
     val isBackendHealthy: Boolean = false,
     val backendVersion: String = "",
     val isLoading: Boolean = false,
@@ -80,22 +83,65 @@ class VishwasViewModel(application: Application) : AndroidViewModel(application)
     private var activeStreamingSessionId: String? = null
     
     init {
+        TokenManager.init(application)
+        // Restore session if token exists
+        if (TokenManager.isLoggedIn()) {
+            _uiState.value = _uiState.value.copy(
+                isLoggedIn = true,
+                loggedInEmail = TokenManager.getEmail()
+            )
+        }
         checkBackendHealth()
     }
     
     override fun onCleared() {
         super.onCleared()
-        // Cleanup active streaming session if exists
         activeStreamingSessionId?.let { sessionId ->
             viewModelScope.launch {
                 try {
                     repository.deleteVoiceStream(sessionId)
-                    Log.d(TAG, "Cleaned up streaming session on ViewModel clear: $sessionId")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to cleanup streaming session on clear", e)
                 }
             }
         }
+    }
+
+    // ── Auth ───────────────────────────────────────────────────────────
+
+    fun authenticate(
+        email: String,
+        password: String,
+        fullName: String? = null,
+        isRegister: Boolean = false,
+        onError: (String) -> Unit = {},
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val result = if (isRegister) {
+                repository.register(email, password, fullName)
+            } else {
+                repository.login(email, password)
+            }
+            result.fold(
+                onSuccess = { auth ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoggedIn = true,
+                        loggedInEmail = auth.user.email
+                    )
+                    onSuccess()
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "Auth error", e)
+                    onError(e.message ?: "Authentication failed")
+                }
+            )
+        }
+    }
+
+    fun logout() {
+        repository.logout()
+        _uiState.value = _uiState.value.copy(isLoggedIn = false, loggedInEmail = "")
     }
     
     /**

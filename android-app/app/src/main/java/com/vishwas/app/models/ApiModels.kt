@@ -3,6 +3,43 @@ package com.vishwas.app.models
 import com.google.gson.annotations.SerializedName
 
 /**
+ * Auth — login request
+ */
+data class LoginRequest(
+    val email: String,
+    val password: String
+)
+
+/**
+ * Auth — register request
+ */
+data class RegisterRequest(
+    val email: String,
+    val password: String,
+    @SerializedName("full_name") val fullName: String? = null
+)
+
+/**
+ * Auth — user profile
+ */
+data class UserResponse(
+    val id: String,
+    val email: String,
+    @SerializedName("full_name") val fullName: String?,
+    @SerializedName("is_active") val isActive: Boolean,
+    @SerializedName("created_at") val createdAt: String
+)
+
+/**
+ * Auth — login / register response
+ */
+data class AuthResponse(
+    @SerializedName("access_token") val accessToken: String,
+    @SerializedName("token_type") val tokenType: String,
+    val user: UserResponse
+)
+
+/**
  * Health check response
  */
 data class HealthResponse(

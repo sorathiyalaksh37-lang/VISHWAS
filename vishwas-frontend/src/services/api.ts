@@ -486,7 +486,7 @@ class APIClient {
         headers['Authorization'] = `Bearer ${token}`
       }
 
-      const response = await fetch(`${this.baseURL}/calls`, {
+      const response = await fetch(`${this.baseURL}/analyze/recording`, {
         method: 'POST',
         headers,
         body: formData,

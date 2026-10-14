@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
  * Navigation routes
  */
 object Routes {
+    const val LOGIN    = "login"
     const val DASHBOARD = "dashboard"
     const val UPLOAD    = "upload"
     const val RECORD    = "record"
@@ -65,6 +66,9 @@ fun VishwasNavHost(
     val uiState       by viewModel.uiState.collectAsState()
     val navBackStack  by navController.currentBackStackEntryAsState()
     val currentRoute  = navBackStack?.destination?.route
+
+    // Determine start destination based on login state
+    val startDestination = if (uiState.isLoggedIn) Routes.DASHBOARD else Routes.LOGIN
 
     fun openDrawer()  = scope.launch { drawerState.open() }
     fun closeDrawer() = scope.launch { drawerState.close() }
@@ -189,13 +193,45 @@ fun VishwasNavHost(
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                     )
                 }
-            }
-        }
+
+                Spacer(modifier = Modifier.weight(1f))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                // ── Logged-in user + Logout ────────────────────────────────────
+                if (uiState.isLoggedIn) {
+                    NavigationDrawerItem(
+                        icon  = { Icon(Icons.Default.Logout, contentDescription = null) },
+                        label = { Text("Sign Out (${uiState.loggedInEmail})") },
+                        selected = false,
+                        onClick = {
+                            closeDrawer()
+                            viewModel.logout()
+                            navController.navigate(Routes.LOGIN) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }   // end ModalDrawerSheet
+        }       // end drawerContent
     ) {
         NavHost(
-            navController   = navController,
-            startDestination = Routes.DASHBOARD
+            navController    = navController,
+            startDestination = startDestination
         ) {
+            // ── Auth ──────────────────────────────────────────────────────
+            composable(Routes.LOGIN) {
+                LoginScreen(
+                    viewModel    = viewModel,
+                    onLoginSuccess = {
+                        navController.navigate(Routes.DASHBOARD) {
+                            popUpTo(Routes.LOGIN) { inclusive = true }
+                        }
+                    }
+                )
+            }
             composable(Routes.DASHBOARD) {
                 DashboardScreen(
                     viewModel          = viewModel,
