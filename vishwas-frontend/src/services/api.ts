@@ -235,19 +235,25 @@ class APIClient {
   async sendVoiceChunk(sessionId: string, chunk: Blob): Promise<StreamChunkResponse | null> {
     try {
       const formData = new FormData()
-      formData.append('chunk', chunk)
+      // Add filename to help backend identify as a file upload
+      formData.append('chunk', chunk, 'audio.raw')
 
       const token = getAuthToken()
       const headers: HeadersInit = {}
       if (token) {
         headers['Authorization'] = `Bearer ${token}`
       }
+      // Don't set Content-Type - let browser set it with boundary for multipart/form-data
+
+      console.log('[API] Sending chunk, size:', chunk.size, 'bytes, session:', sessionId)
 
       const response = await fetch(`${this.baseURL}/voice-detection/stream/${sessionId}/chunk`, {
         method: 'POST',
         headers,
         body: formData,
       })
+
+      console.log('[API] Chunk response status:', response.status)
 
       if (response.status === 404) {
         // Session not found or expired
@@ -256,11 +262,14 @@ class APIClient {
       }
 
       if (!response.ok) {
-        console.error(`Send voice chunk failed: ${response.status}`)
+        const errorText = await response.text()
+        console.error(`Send voice chunk failed: ${response.status}`, errorText)
         return null
       }
 
-      return await response.json()
+      const result = await response.json()
+      console.log('[API] Chunk result:', result)
+      return result
     } catch (error) {
       console.error('Send voice chunk error:', error)
       // Re-throw to allow component to handle specific error types

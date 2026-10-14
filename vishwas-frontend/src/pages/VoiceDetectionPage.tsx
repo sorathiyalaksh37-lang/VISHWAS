@@ -134,11 +134,18 @@ export function VoiceDetectionPage() {
         if (sessionId) {
           try {
             const blob = new Blob([chunk], { type: 'application/octet-stream' })
-            console.log('[VoiceDetection] Sending chunk to backend, session:', sessionId)
+            console.log('[VoiceDetection] Sending chunk to backend, session:', sessionId, 'blob size:', blob.size)
             const response = await apiClient.sendVoiceChunk(sessionId, blob)
             console.log('[VoiceDetection] Chunk response:', response)
 
             if (response) {
+              console.log('[VoiceDetection] Updating UI with response:', {
+                spoofProb: response.spoof_prob,
+                confidence: response.confidence,
+                label: response.label,
+                chunksProcessed: response.chunks_processed
+              })
+              
               setSpoofProb(response.spoof_prob)
               setConfidence(response.confidence)
               setChunksProcessed(response.chunks_processed)
@@ -148,6 +155,7 @@ export function VoiceDetectionPage() {
               }
             } else {
               // Network error or non-404 failure
+              console.error('[VoiceDetection] No response from backend')
               setStatus('error')
               setErrorMsg('Network error - check backend connection')
               stopRecording()
